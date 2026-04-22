@@ -1,78 +1,90 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { useEffect } from "react";
-// 🔥 Unseren Hook importieren
-import { useAuth } from "@/components/AuthProvider";
+import { useEffect, useState } from "react";
 
 export default function DiscordLogin() {
-  // 🔥 User und Loading aus dem globalen State holen
-  const { user, loading } = useAuth();
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Wenn wir noch laden oder kein User da ist, machen wir nichts.
-    if (loading || !user) return;
+  useEffect(() => {
+    const getUser = async () => {
+      const { data } = await supabase.auth.getUser();
 
-    const syncDiscordProfile = async () => {
-      const discordId = user.user_metadata?.provider_id;
+      if (!data.user) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
 
-      if (discordId) {
-        localStorage.setItem("discord_user_id", discordId);
+      setUser(data.user);
+      const discordId = data.user.user_metadata?.provider_id;
 
-        try {
-          // 🚀 DATEN DIREKT VON DER API HOLEN
-          const res = await fetch(`/api/discord/member?userId=${discordId}`);
-          const discordData = await res.json();
+      if (discordId) {
+        localStorage.setItem("discord_user_id", discordId);
 
-          console.log("DISCORD DATA:", discordData);
+        // 🚀 NEU: DATEN DIREKT VON DER API HOLEN
+        const res = await fetch(`/api/discord/member?userId=${discordId}`);
+        const discordData = await res.json();
 
-          // 👉 NUR NOCH discordData.roles NUTZEN
-          const roles = discordData?.roles || [];
-          console.log("ROLES FROM API:", roles);
+        console.log("DISCORD DATA:", discordData);
 
-          // Check gegen die spezifische Orga-ID
-          const isAdmin = roles.some((r: any) => String(r) === "1492478735444873398");
-          console.log("IS ADMIN:", isAdmin);
+        // 👉 NUR NOCH discordData.roles NUTZEN
+        const roles = discordData?.roles || [];
+        console.log("ROLES FROM API:", roles);
 
-          // Profile Upsert mit den API-Daten
-          const { error } = await supabase.from("profiles").upsert({
-            id: user.id,
-            discord_id: discordId,
-            is_admin: isAdmin,
-          });
+        // Check gegen die spezifische Orga-ID
+        const isAdmin = roles.some((r: any) => String(r) === "1492478735444873398");
+        console.log("IS ADMIN:", isAdmin);
 
-          if (error) console.log("PROFILE UPSERT ERROR:", error);
-        } catch (error) {
-           console.error("Fehler beim Discord-Sync:", error);
-        }
-      }
-    };
+        // Profile Upsert mit den API-Daten
+        const { error } = await supabase.from("profiles").upsert({
+          id: data.user.id,
+          discord_id: discordId,
+          is_admin: isAdmin,
+        });
 
-    // Die Funktion ausführen, sobald ein User erkannt wurde
-    syncDiscordProfile();
+        if (error) console.log("PROFILE UPSERT ERROR:", error);
+      }
 
-  // 🔥 Der Effect feuert immer dann, wenn sich der user ändert (z.B. nach einem Login)
-  }, [user, loading]);
+      setLoading(false);
+    };
 
-  const login = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "discord",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (error) console.error("Login Error:", error);
-  };
+    getUser();
 
-  // 🔥 Wenn der User da ist (oder wir noch laden), zeigen wir den Login-Button NICHT an.
-  if (user || loading) return null;
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        const sessionUser = session?.user ?? null;
+        setUser(sessionUser);
+        if (sessionUser?.user_metadata?.provider_id) {
+          localStorage.setItem("discord_user_id", sessionUser.user_metadata.provider_id);
+        }
+      }
+    );
 
-  return (
-    <button
-      onClick={login}
-      className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 transition-colors px-4 py-2 rounded-lg text-white font-medium flex justify-center items-center"
-    >
-      Login mit Discord
-    </button>
-  );
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const login = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "discord",
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) console.error("Login Error:", error);
+  };
+
+  if (user) return null;
+
+  return (
+    <button
+      onClick={login}
+      className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 transition-colors px-4 py-2 rounded-lg text-white font-medium flex justify-center items-center"
+    >
+      Login mit Discord
+    </button>
+  );
 }
