@@ -1,10 +1,17 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  // Das hier einfügen: Erlaubt den Zugriff von deinem Smartphone im lokalen Netzwerk
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Erlaubt den Zugriff von deinem Smartphone im lokalen Netzwerk
   allowedDevOrigins: ['192.168.2.111'],
   
-  // (Falls hier schon andere Dinge standen, lass sie einfach stehen!)
+  // 🔥 NEU: Erlaubt Next.js, die Discord-Profilbilder zu cachen und zu optimieren
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cdn.discordapp.com',
+      },
+    ],
+  },
 };
 
 export default nextConfig;
