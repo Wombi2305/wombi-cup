@@ -17,9 +17,12 @@ export default function Navbar() {
           WOMBI CUP
         </Link>
 
+        {/* DESKTOP LINKS */}
         <div className="hidden md:flex items-center gap-6 text-sm text-white/80">
           <Link href="/anmelden" className="hover:text-yellow-400 transition">Turniere</Link>
           <Link href="/tabelle" className="hover:text-yellow-400 transition">Gruppen</Link>
+          {/* 🔥 NEUER LINK: K.O. Phase */}
+          <Link href="/kophase" className="hover:text-yellow-400 transition font-medium text-yellow-500/90">K.O. Phase</Link>
           <Link href="/ranking" className="hover:text-yellow-400 transition">Ranking</Link>
         </div>
 
@@ -38,6 +41,7 @@ export default function Navbar() {
         </div>
       </div>
 
+      {/* MOBILE MENU */}
       {open && (
         <div className="md:hidden bg-black/95 backdrop-blur-xl border-t border-yellow-500/10 px-6 py-6 space-y-6 shadow-2xl h-screen overflow-y-auto pb-32">
           <Link href="/anmelden" className="block text-lg font-medium text-white/90 hover:text-yellow-400" onClick={() => setOpen(false)}>
@@ -45,6 +49,10 @@ export default function Navbar() {
           </Link>
           <Link href="/tabelle" className="block text-lg font-medium text-white/90 hover:text-yellow-400" onClick={() => setOpen(false)}>
             Gruppen
+          </Link>
+          {/* 🔥 NEUER LINK MOBIL: K.O. Phase */}
+          <Link href="/kophase" className="block text-lg font-medium text-yellow-400 hover:text-yellow-300" onClick={() => setOpen(false)}>
+            K.O. Phase
           </Link>
           <Link href="/ranking" className="block text-lg font-medium text-white/90 hover:text-yellow-400" onClick={() => setOpen(false)}>
             Ranking
