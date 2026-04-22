@@ -17,17 +17,14 @@ export default function Anmelden() {
   const [success, setSuccess] = useState<{ [key: number]: boolean }>({});
   const [message, setMessage] = useState<string | null>(null);
   
-  // Separater Loading-State für die Discord-Prüfung
+  // 🔥 Ein einziger, extrem schneller Ladezustand für alle Hintergrund-Daten
   const [discordUser, setDiscordUser] = useState<any>(null);
-  const [isCheckingDiscord, setIsCheckingDiscord] = useState<boolean>(true);
-
-  // States für den Datenbank-Team-Check
   const [existingDbTeam, setExistingDbTeam] = useState<any>(null);
-  const [dbCheckDone, setDbCheckDone] = useState<boolean>(false);
+  const [dataLoaded, setDataLoaded] = useState<boolean>(false);
 
-  // --- 🔥 FIX: PRÜFUNG DER ROLLE (ORGA & TEAMVM ERLAUBT) ---
+  // --- PRÜFUNG DER ROLLE (ORGA & TEAMVM ERLAUBT) ---
   const TEAMVM_ROLE = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
-  const ORGA_ROLE = "1492478735444873398"; // Orga Rolle hinzugefügt
+  const ORGA_ROLE = "1492478735444873398"; 
   
   const hasRequiredRole = discordUser?.roles?.includes(TEAMVM_ROLE) || discordUser?.roles?.includes(ORGA_ROLE);
 
@@ -51,70 +48,57 @@ export default function Anmelden() {
     };
   }, []);
 
-  // --- 2. USER DB CHECK (Wartet auf den useAuth Hook) ---
+  // --- 2. 🔥 SPEED-UP: PARALLELER DATEN-FETCH (DB + Discord) ---
   useEffect(() => {
-    if (authLoading) return; // Warten, bis Auth-Status klar ist
+    if (authLoading) return; // Wir warten nur kurz, bis der UseAuth-Hook fertig ist
 
-    const checkDbTeam = async () => {
+    let isMounted = true;
+
+    const loadAllData = async () => {
+      const promises = [];
+
+      // Aufgabe 1: Supabase-Team laden
       if (user) {
-        // Schauen, ob der User in der DB schon ein Profil-Team hat
-        const { data: team } = await supabase
-          .from("teams")
-          .select("teamname, captain")
-          .eq("user_id", user.id)
-          .single();
-          
-        if (team) {
-          setExistingDbTeam(team);
-        }
+        promises.push(
+          supabase.from("teams").select("teamname, captain").eq("user_id", user.id).single()
+            .then(({ data }) => {
+              if (data && isMounted) setExistingDbTeam(data);
+            })
+        );
       }
-      setDbCheckDone(true); // Check abgeschlossen
-    };
 
-    checkDbTeam();
-  }, [user, authLoading]);
-
-  // --- 3. 🔥 SPEED-UP: DISCORD FETCH (Parallelisiert) ---
-  useEffect(() => {
-    const checkDiscord = async () => {
-      // Wir holen uns die ID sofort aus dem Storage, um nicht auf authLoading warten zu müssen
+      // Aufgabe 2: Discord-Rollen laden
       const storedId = localStorage.getItem("discord_user_id");
       const userId = user?.user_metadata?.provider_id || storedId;
+
+      if (userId) {
+        promises.push(
+          fetch(`/api/discord/member?userId=${userId}`)
+            .then(res => res.json())
+            .then(data => {
+              if (!data.error && isMounted) setDiscordUser(data);
+            })
+            .catch(err => console.error("Discord API Error:", err))
+        );
+      }
+
+      // 🔥 BEIDE Aufgaben gleichzeitig starten und warten, bis sie fertig sind
+      await Promise.allSettled(promises);
       
-      // Wenn keine ID da ist, aber Auth noch lädt, warten wir noch kurz
-      if (!userId && authLoading) return;
-
-      // Wenn wir sicher keine ID haben -> abbrechen
-      if (!userId) {
-        setDiscordUser(null);
-        setIsCheckingDiscord(false);
-        return;
-      }
-
-      try {
-        const res = await fetch(`/api/discord/member?userId=${userId}`);
-        const data = await res.json();
-        
-        if (data.error) {
-            setDiscordUser(null);
-        } else {
-            setDiscordUser(data);
-        }
-      } catch (err) {
-        console.error("Discord API Error:", err);
-        setDiscordUser(null);
-      } finally {
-        setIsCheckingDiscord(false); 
-      }
+      // BAM! Alles fertig, UI freischalten
+      if (isMounted) setDataLoaded(true);
     };
-    
-    checkDiscord();
+
+    loadAllData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, authLoading]);
 
-  // --- AUTOFILL LOGIK ---
+  // --- 3. AUTOFILL LOGIK ---
   useEffect(() => {
-    // Wir warten strikt, bis Turniere, Datenbank-Check UND Discord-Check FERTIG sind!
-    if (tournaments.length === 0 || !dbCheckDone || isCheckingDiscord) return;
+    if (tournaments.length === 0 || !dataLoaded) return;
 
     let defaultTeam = "";
     let defaultCaptain = "";
@@ -127,7 +111,7 @@ export default function Anmelden() {
     // 2. PRIORITÄT: Discord Nickname (Fallback)
     else if (discordUser && discordUser.nick) {
       const parts = discordUser.nick.split("|");
-      defaultTeam = parts[0] ? parts[0].trim() : discordUser.nick; // Nimm ganzen Namen falls kein "|" drin ist
+      defaultTeam = parts[0] ? parts[0].trim() : discordUser.nick;
       defaultCaptain = parts[1] ? parts[1].trim() : "";
     }
 
@@ -151,7 +135,7 @@ export default function Anmelden() {
       });
       return updated;
     });
-  }, [discordUser, tournaments, existingDbTeam, dbCheckDone, isCheckingDiscord]);
+  }, [discordUser, tournaments, existingDbTeam, dataLoaded]);
 
   // --- LOGIK FUNKTIONEN ---
   const fetchTournaments = async () => {
@@ -352,7 +336,7 @@ export default function Anmelden() {
                       {loading[t.id] ? "Wird abgemeldet..." : "Vom Turnier abmelden"}
                     </button>
                   </div>
-                ) : isCheckingDiscord || !dbCheckDone ? (
+                ) : !dataLoaded ? (
                   <div className="flex flex-col gap-3 mt-auto">
                     <button disabled className="w-full p-3 md:p-4 rounded-xl bg-white/5 text-gray-400 font-semibold cursor-wait border border-white/10 animate-pulse text-sm md:text-base">
                       Lade Daten...
