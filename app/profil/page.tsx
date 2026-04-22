@@ -2,18 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+// 🔥 NEU: Die magische Next.js Image Komponente
+import Image from "next/image";
 
-// 🔥 Unseren neuen Hook importieren
 import { useAuth } from "@/components/AuthProvider";
 
 export default function ProfilPage() {
-  // 🔥 BAM! User und Auth-Loading blitzschnell aus dem globalen State holen
   const { user, loading: authLoading } = useAuth();
 
   const [profile, setProfile] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
   
-  // 🔥 Eigener Loading-State für die Datenbank-Abfragen
   const [isDataLoading, setIsDataLoading] = useState(true);
   
   const [saving, setSaving] = useState(false);
@@ -24,25 +23,20 @@ export default function ProfilPage() {
   const [teamname, setTeamname] = useState("");
   const [captain, setCaptain] = useState("");
 
-  // ALLE WICHTIGEN ROLLEN IDs
   const TEAMVM_ROLE = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
   const ORGA_ROLE = "1492478735444873398";
   const SPIELER_ROLE = "1491812561119875154";
   const FREEAGENT_ROLE = "1492462347967664198";
 
   useEffect(() => {
-    // Wenn der Auth-Provider noch lädt, warten wir einfach ab
     if (authLoading) return;
 
-    // Wenn der Auth-Provider fertig ist, aber kein User eingeloggt ist, brechen wir ab
     if (!user) {
       setIsDataLoading(false);
       return;
     }
 
-    // 🔥 Ab hier wissen wir sicher: Der User ist eingeloggt! Jetzt holen wir seine Daten:
     const fetchData = async () => {
-      // Rollen von Discord Api abrufen
       const discordId = user.user_metadata?.provider_id;
       if (discordId) {
         try {
@@ -54,7 +48,6 @@ export default function ProfilPage() {
         }
       }
 
-      // Profil-Daten aus DB holen
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
@@ -63,7 +56,6 @@ export default function ProfilPage() {
         
       if (profileData) setProfile(profileData);
 
-      // Team holen
       const { data: teamData } = await supabase
         .from("teams")
         .select("*")
@@ -80,7 +72,7 @@ export default function ProfilPage() {
     };
 
     fetchData();
-  }, [user, authLoading]); // 🔥 Effect reagiert auf user und authLoading
+  }, [user, authLoading]);
 
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -121,7 +113,6 @@ export default function ProfilPage() {
     }
   };
 
-  // 🔥 Kombinierter Loading-Check
   if (authLoading || isDataLoading) {
     return (
       <div className="min-h-[calc(100vh-100px)] flex items-center justify-center text-white">
@@ -236,9 +227,13 @@ export default function ProfilPage() {
             <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-10 shadow-xl flex flex-col items-center justify-center text-center h-full relative overflow-hidden">
               
               <div className="w-full max-w-sm mb-6 relative rounded-2xl overflow-hidden shadow-2xl shadow-black/60 border border-white/10 group cursor-pointer">
-                <img 
+                {/* 🔥 HIER IST DIE MAGIE: Next.js Image mit priority! */}
+                <Image 
                   src="/Spieleranalys.png" 
-                  alt="Teaser Spieleranalyse" 
+                  alt="Teaser Spieleranalyse"
+                  width={600}
+                  height={400}
+                  priority // 🔥 Das lädt das Bild vorab!
                   className="w-full h-auto object-cover opacity-80 group-hover:opacity-100 transition-all duration-700 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#111] via-transparent to-transparent opacity-80"></div>
