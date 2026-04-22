@@ -2,9 +2,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// 🔥 Unseren neuen Hook importieren
+import { useAuth } from "@/components/AuthProvider";
+
 export default function Admin() {
+  // 🔥 BAM! User und Auth-Loading aus dem globalen State holen
+  const { user, loading: authLoading } = useAuth();
+
   const [loggedIn, setLoggedIn] = useState(false);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  // Ersetzen wir das alte loadingAuth durch einen eigenen State für den Rollen-Check
+  const [isDataLoading, setIsDataLoading] = useState(true); 
+
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [groups, setGroups] = useState<any>({});
@@ -34,17 +42,26 @@ export default function Admin() {
 
   // 🔒 Zuverlässiges Discord-Login-System
   useEffect(() => {
-    const check = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const userId = localStorage.getItem("discord_user_id");
+    if (authLoading) return; // Warten, bis Auth-Provider fertig ist
 
-      if (!userId) {
-        setLoadingAuth(false);
+    const check = async () => {
+      // Wenn kein User eingeloggt ist, direkt abblocken
+      if (!user) {
+        setLoggedIn(false);
+        setIsDataLoading(false);
+        return;
+      }
+
+      const discordId = user.user_metadata?.provider_id || localStorage.getItem("discord_user_id");
+
+      if (!discordId) {
+        setLoggedIn(false);
+        setIsDataLoading(false);
         return;
       }
 
       try {
-        const res = await fetch(`/api/discord/member?userId=${userId}`);
+        const res = await fetch(`/api/discord/member?userId=${discordId}`);
         const data = await res.json();
 
         const ORGA_ROLE_ID = "1492478735444873398"; // 👑 Orga Rolle
@@ -62,16 +79,15 @@ export default function Admin() {
         setLoggedIn(false);
       }
       
-      setLoadingAuth(false);
+      setIsDataLoading(false);
     };
 
     check();
-  }, []);
+  }, [user, authLoading]);
 
   useEffect(() => {
     if (!loggedIn) return;
     
-    // 🔥 REALTIME: Hört nun auch auf tournament_registrations
     const channel = supabase.channel("admin-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "group_assignments" }, () => fetchGroups())
@@ -104,7 +120,6 @@ export default function Admin() {
     await fetchGroups();
   };
 
-  // 🔥 ANGEPASST: Nutzt nun die Registrierungstabelle
   const fetchGroups = async () => {
     const { data: regs } = await supabase
       .from("tournament_registrations")
@@ -114,10 +129,9 @@ export default function Admin() {
     const { data: assignments } = await supabase.from("group_assignments").select("*");
     
     if (regs) {
-      // Map für die UI, damit nichts kaputt geht
       const mappedTeams = regs.map((r: any) => ({
           id: r.team_id,
-          registration_id: r.id, // 🔥 Wichtig für Status-Updates
+          registration_id: r.id, 
           tournament_id: r.tournament_id,
           status: r.status,
           teamname: r.teams?.teamname,
@@ -140,15 +154,12 @@ export default function Admin() {
     }
   };
 
-  // 🔥 ANGEPASST: Aktualisiert nun die tournament_registrations Tabelle
   const updateTeamStatus = async (registrationId: number, status: "approved" | "waiting") => {
     await supabase.from("tournament_registrations").update({ status }).eq("id", registrationId);
     fetchData();
   };
 
-  // 🔥 ANGEPASST: 2-Schritt-Erstellung für das Dummy-Team
   const addFreilos = async (tournamentId: number) => {
-    // 1. Dummy Team anlegen (ohne tournament_id)
     const { data: newTeam, error: teamError } = await supabase.from("teams").insert([{
       teamname: "--- FREILOS ---"
     }]).select().single();
@@ -158,7 +169,6 @@ export default function Admin() {
       return;
     }
 
-    // 2. Registrierung für das Turnier erstellen
     const { error: regError } = await supabase.from("tournament_registrations").insert([{
       team_id: newTeam.id,
       tournament_id: tournamentId,
@@ -187,7 +197,6 @@ export default function Admin() {
     fetchData();
   };
 
-  // 🔥 ANGEPASST: Nutzt nun tournament_registrations
   const handleTeamMovement = async (tournamentId: number, maxTeams: number) => {
     const { data: allRegs } = await supabase
       .from("tournament_registrations")
@@ -338,7 +347,6 @@ export default function Admin() {
     fetchData();
   };
 
-  // 🔥 INTERNE BERECHNUNG FÜR K.O. GENERATOR
   const calculateRankingsForKo = (tournamentId: number) => {
     const tGroups = groups[tournamentId];
     if (!tGroups) return [];
@@ -387,7 +395,6 @@ export default function Admin() {
     return allRankedTeams.filter(t => t.teamname !== "--- FREILOS ---");
   };
 
-  // 🔥 K.O.-PHASE GENERIEREN (Global Seeding)
   const generateKoPhase = async (tournamentId: number) => {
     const size = koSizes[tournamentId] || 8; 
 
@@ -454,7 +461,6 @@ export default function Admin() {
     setScoreInputs((prev: any) => ({ ...prev, [matchId]: { ...prev[matchId], [field]: value.replace(/[^0-9]/g, "") } }));
   };
 
-  // ✅ NEU: EINZELNES SPIEL SPEICHERN (Inkl. TS Fix für Auto-Advance)
   const saveSingleMatch = async (matchId: number) => {
     const input = scoreInputs[matchId];
     if (!input) return;
@@ -481,7 +487,6 @@ export default function Admin() {
       return;
     }
 
-    // 🔥 AUTO-ADVANCE für Admin
     const m = matches.find(x => x.id === matchId);
     if (m && m.match_type === "ko" && m.ko_round > 2) {
       const { data: roundMatches } = await supabase.from("matches").select("*").eq("tournament_id", m.tournament_id).eq("ko_round", m.ko_round).eq("match_type", "ko");
@@ -556,7 +561,7 @@ export default function Admin() {
   };
 
   // 🔥 Ladescreen während Authentifizierung geprüft wird
-  if (loadingAuth) {
+  if (authLoading || isDataLoading) {
     return (
       <div className="h-screen flex items-center justify-center text-white font-medium">
         <div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
@@ -564,7 +569,7 @@ export default function Admin() {
     );
   }
 
-  // 🔒 Seite blocken: Neues Design
+  // 🔒 Seite blocken
   if (!loggedIn) {
     return (
       <main className="h-screen flex flex-col items-center justify-center text-white p-4 md:p-6 text-center">
@@ -599,7 +604,7 @@ export default function Admin() {
           const tournamentMatches = matches.filter(m => m.tournament_id === t.id && m.match_type !== "ko");
           const roundNumbers = Array.from(new Set(tournamentMatches.map(m => m.round || 1))).sort((a, b) => a - b);
           
-          // 🔥 PRÜFEN OB ALLE GRUPPENSPIELE FERTIG SIND
+          // PRÜFEN OB ALLE GRUPPENSPIELE FERTIG SIND
           const allGroupMatchesConfirmed = tournamentMatches.length > 0 && tournamentMatches.every(m => m.status === "confirmed");
 
           // Matches für K.O. Phase
@@ -644,7 +649,6 @@ export default function Admin() {
                         {team.teamname}
                       </span>
                       <div className="flex gap-4">
-                        {/* 🔥 WICHTIG: Nutzt jetzt team.registration_id */}
                         <button onClick={() => updateTeamStatus(team.registration_id, "approved")} className={`${team.status === 'approved' ? 'text-green-500 scale-110' : 'text-gray-500'} hover:scale-125 transition-transform text-base`}>✔</button>
                         <button onClick={() => updateTeamStatus(team.registration_id, "waiting")} className={`${team.status === 'waiting' ? 'text-yellow-500 scale-110' : 'text-gray-500'} hover:scale-125 transition-transform text-base`}>⏳</button>
                       </div>
@@ -655,7 +659,6 @@ export default function Admin() {
                   )}
                 </div>
                 
-                {/* 🔥 NEUER BUTTON: FREILOS HINZUFÜGEN 🔥 */}
                 <button onClick={() => addFreilos(t.id)} className="w-full mt-3 border border-dashed border-gray-600 text-gray-400 hover:text-white hover:border-white py-2 rounded-xl text-xs font-bold transition">
                   + Dummy-Team (--- FREILOS ---) hinzufügen
                 </button>

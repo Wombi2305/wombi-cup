@@ -1,18 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+// 🔥 Unseren neuen Hook importieren
+import { useAuth } from "@/components/AuthProvider";
 
 export default function MeineTeamsTeaserPage() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-      setLoading(false);
-    });
-  }, []);
+  // 🔥 BAM! User und Loading blitzschnell aus dem globalen State holen
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (

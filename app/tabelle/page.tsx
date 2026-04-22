@@ -4,13 +4,18 @@ import { useEffect, useState, Fragment, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
+// 🔥 Unseren neuen Hook importieren
+import { useAuth } from "@/components/AuthProvider";
+
 export default function TurnierTabelle() {
   const router = useRouter();
+
+  // 🔥 BAM! User direkt und synchron abrufen
+  const { user } = useAuth();
 
   // --- STATES ---
   const [loadingData, setLoadingData] = useState(true);
   const [isReady, setIsReady] = useState(false);
-  const [user, setUser] = useState<any>(null);
   
   const [activeRound, setActiveRound] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"active" | "finished">("active");
@@ -117,9 +122,7 @@ export default function TurnierTabelle() {
     return result;
   }, [matchesByGroup, groups]);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-  }, []);
+  // 🔥 Der alte useEffect für supabase.auth.getUser() wurde komplett gelöscht!
 
   useEffect(() => {
     setIsReady(false);
@@ -133,7 +136,7 @@ export default function TurnierTabelle() {
       .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => fetchData(true))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [selectedTournament, user]);
+  }, [selectedTournament, user]); // user kann hier als Dependency bleiben
 
   const fetchTournaments = async () => {
     setLoadingData(true);
@@ -151,7 +154,6 @@ export default function TurnierTabelle() {
     setLoadingData(false);
   };
 
-  // 🔥 GEÄNDERT: Holt die Teams nun aus der Registrierungstabelle
   const fetchData = async (isBackground = false) => {
     if (!isBackground && !isReady) setLoadingData(true);
     
@@ -159,7 +161,7 @@ export default function TurnierTabelle() {
       .from("tournament_registrations")
       .select("teams(*)")
       .eq("tournament_id", selectedTournament)
-      .eq("status", "approved"); // Wir wollen nur die bestätigten Teams in der Tabelle
+      .eq("status", "approved"); 
       
     const { data: m } = await supabase.from("matches").select("*").eq("tournament_id", selectedTournament);
     const { data: g } = await supabase.from("group_assignments").select("*").eq("tournament_id", selectedTournament);
@@ -195,12 +197,14 @@ export default function TurnierTabelle() {
   };
 
   const handleReport = async (matchId: number, s1: number, s2: number) => {
-    await supabase.from("matches").update({ score1: s1, score2: s2, status: "reported", reported_by: user.id }).eq("id", matchId);
+    // 🔥 Hier nutzen wir den User aus dem neuen Hook
+    await supabase.from("matches").update({ score1: s1, score2: s2, status: "reported", reported_by: user?.id }).eq("id", matchId);
     fetchData(true);
   };
 
   const handleConfirm = async (matchId: number) => {
-    await supabase.from("matches").update({ status: "confirmed", confirmed_by: user.id }).eq("id", matchId);
+    // 🔥 Hier nutzen wir den User aus dem neuen Hook
+    await supabase.from("matches").update({ status: "confirmed", confirmed_by: user?.id }).eq("id", matchId);
     fetchData(true);
   };
 
@@ -228,7 +232,6 @@ export default function TurnierTabelle() {
         </div>
 
         <div className="flex gap-2 flex-wrap items-center">
-          {/* 🔥 DYNAMISCHER BUTTON WIE IN KO PHASE */}
           {activeUserMatch && (
             <button 
               onClick={() => setActiveRound(activeUserMatch.round)} 

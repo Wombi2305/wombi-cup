@@ -5,11 +5,17 @@ import Link from "next/link";
 import DiscordLogin from "@/components/DiscordLogin";
 import AccountMenu from "@/components/AccountMenu";
 
+// 🔥 Unseren neuen Hook importieren
+import { useAuth } from "@/components/AuthProvider";
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  
+  // 🔥 Blitzschneller Check, ob jemand eingeloggt ist
+  const { user } = useAuth();
 
   return (
-    // 🔥 FIX: z-[100] zwingt die Navbar über absolut jeden anderen Inhalt
+    // FIX: z-[100] zwingt die Navbar über absolut jeden anderen Inhalt
     <nav className="fixed top-0 left-0 w-full z-[100] bg-black/80 backdrop-blur-lg border-b border-yellow-500/10 pointer-events-auto">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
 
@@ -25,8 +31,8 @@ export default function Navbar() {
 
         <div className="flex items-center gap-3 relative z-10">
           <div className="hidden md:flex items-center gap-3">
-            <AccountMenu />
-            <DiscordLogin />
+            {/* 🔥 Logik vereinfacht: Entweder Menü ODER Login-Button */}
+            {user ? <AccountMenu /> : <DiscordLogin />}
           </div>
 
           <button
@@ -51,8 +57,8 @@ export default function Navbar() {
           </Link>
 
           <div className="pt-6 border-t border-white/10 flex flex-col gap-4">
-            <AccountMenu />
-            <DiscordLogin />
+            {/* 🔥 Auch im Mobile-Menü: Entweder Menü ODER Login-Button */}
+            {user ? <AccountMenu /> : <DiscordLogin />}
           </div>
         </div>
       )}

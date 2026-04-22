@@ -3,23 +3,20 @@
 import { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import KoPhase from "@/components/KoPhase";
-import { useSearchParams } from "next/navigation"; // 🔥 NEU: Der Next.js Weg, um URLs zu lesen
+import { useSearchParams } from "next/navigation"; 
 
-// Die eigentliche Logik haben wir in eine Unter-Komponente ausgelagert
 function KoPhaseContent() {
-  const searchParams = useSearchParams(); // 🔥 NEU: Suchparameter auslesen
+  const searchParams = useSearchParams(); 
   
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  // 🔥 Der lokale user-State wurde komplett gelöscht!
+  
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [selectedTournament, setSelectedTournament] = useState<number | null>(null);
   const [teams, setTeams] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
 
-  // 1. User abrufen
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-  }, []);
+  // 🔥 Der useEffect für supabase.auth.getUser() ist restlos verschwunden!
 
   // 2. Turniere laden & URL-Parameter prüfen
   useEffect(() => {
@@ -29,25 +26,23 @@ function KoPhaseContent() {
       if (data && data.length > 0) {
         setTournaments(data);
         
-        // 🔥 NEU: Hier greifen wir jetzt die ID sicher über Next.js ab
         const urlId = searchParams.get("tournamentId");
         
         if (urlId && data.some(t => t.id === Number(urlId))) {
-          setSelectedTournament(Number(urlId)); // Turnier aus der URL setzen
+          setSelectedTournament(Number(urlId)); 
         } else {
-          setSelectedTournament(data[0].id); // Fallback: Erstes Turnier
+          setSelectedTournament(data[0].id); 
         }
       }
       setLoading(false);
     };
     fetchTournaments();
-  }, [searchParams]); // 🔥 NEU: Reagiert, wenn sich die URL ändert
+  }, [searchParams]);
 
   // 3. Daten für K.O. Phase laden
   useEffect(() => {
     if (!selectedTournament) return;
     const fetchData = async () => {
-      // 🔥 GEÄNDERT: Wir holen die Teams über die Verknüpfungstabelle
       const { data: regData } = await supabase
         .from("tournament_registrations")
         .select("teams(*)")
@@ -59,7 +54,6 @@ function KoPhaseContent() {
         .eq("tournament_id", selectedTournament);
         
       if (regData) {
-        // Teams entpacken, damit die Child-Komponente nichts von dem Join merkt
         const extractedTeams = regData.map((r: any) => r.teams).filter(Boolean);
         setTeams(extractedTeams);
       }
@@ -103,7 +97,7 @@ function KoPhaseContent() {
         <KoPhase 
           matches={matches} 
           teams={teams} 
-          user={user} 
+          // 🔥 Das `user={user}` wurde hier gelöscht, da sich die KoPhase das jetzt selbst nimmt!
           koSize={currentTournament?.ko_teams_count} 
         />
       )}
@@ -111,7 +105,6 @@ function KoPhaseContent() {
   );
 }
 
-// 🔥 NEU: Next.js verlangt, dass alles, was useSearchParams nutzt, in eine <Suspense> Klammer kommt
 export default function KoPhasePage() {
   return (
     <Suspense fallback={<div className="h-screen flex items-center justify-center text-white">Lade K.O. Phase...</div>}>

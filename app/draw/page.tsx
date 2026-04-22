@@ -2,13 +2,19 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// 🔥 Unseren neuen Hook importieren
+import { useAuth } from "@/components/AuthProvider";
+
 const shuffleGroups = (groups: string[]) => {
   return [...groups].sort(() => Math.random() - 0.5);
 };
 
 export default function DrawPage() {
+  // 🔥 BAM! User und Auth-Loading aus dem globalen State holen
+  const { user, loading: authLoading } = useAuth();
+
   const [authorized, setAuthorized] = useState(false);
-  const [loadingAuth, setLoadingAuth] = useState(true);
+  const [isDataLoading, setIsDataLoading] = useState(true); // Ersetzt das alte loadingAuth
   const [mounted, setMounted] = useState(false);
 
   const [tournaments, setTournaments] = useState<any[]>([]);
@@ -34,15 +40,23 @@ export default function DrawPage() {
     setMounted(true);
   }, []);
 
-  // 🔒 Zuverlässiges Discord-Login-System
+  // 🔒 Zuverlässiges Discord-Login-System (angepasst auf useAuth)
   useEffect(() => {
+    if (authLoading) return;
+
     const checkAccess = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const discordId = authData.user?.user_metadata?.provider_id;
+      // Wenn gar kein User da ist, direkt abblocken
+      if (!user) {
+        setAuthorized(false);
+        setIsDataLoading(false);
+        return;
+      }
+
+      const discordId = user.user_metadata?.provider_id;
 
       if (!discordId) {
         setAuthorized(false);
-        setLoadingAuth(false);
+        setIsDataLoading(false);
         return;
       }
 
@@ -67,11 +81,11 @@ export default function DrawPage() {
         setAuthorized(false);
       }
 
-      setLoadingAuth(false);
+      setIsDataLoading(false);
     };
 
     checkAccess();
-  }, []);
+  }, [user, authLoading]); // 🔥 Reagiert auf user und authLoading
 
   const updateGroupNames = (count: number) => {
     const names: string[] = [];
@@ -97,7 +111,6 @@ export default function DrawPage() {
 
       const fullTournaments = [];
       for (const t of tournamentsData) {
-        // 🔥 GEÄNDERT: Zählt nun die Teams in tournament_registrations
         const { count } = await supabase
           .from("tournament_registrations")
           .select("*", { count: "exact", head: true })
@@ -111,7 +124,6 @@ export default function DrawPage() {
 
     fetchTournaments();
 
-    // 🔥 GEÄNDERT: Hört nun auch auf tournament_registrations
     const channel = supabase.channel("draw-tournaments")
       .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, () => fetchTournaments())
       .on("postgres_changes", { event: "*", schema: "public", table: "tournament_registrations" }, () => fetchTournaments())
@@ -142,7 +154,6 @@ export default function DrawPage() {
     if (selectedTournament) fetchTeams();
   }, [selectedTournament]);
 
-  // 🔥 GEÄNDERT: Holt die Teams über den JOIN aus tournament_registrations
   const fetchTeams = async () => {
     if (!selectedTournament) return;
     const { data } = await supabase
@@ -152,7 +163,6 @@ export default function DrawPage() {
       .eq("status", "approved");
       
     if (data) {
-      // Wir entpacken das Array, damit es genau die alte Struktur für die UI hat
       const extractedTeams = data.map((r: any) => r.teams).filter(Boolean);
       setTeams(extractedTeams);
       setShuffled([...extractedTeams].sort(() => Math.random() - 0.5));
@@ -277,7 +287,8 @@ export default function DrawPage() {
     await supabase.from("tournaments").update({ draw_finished: true }).eq("id", selectedTournament);
   };
 
-  if (!mounted || loadingAuth) {
+  // 🔥 Loading State angepasst
+  if (!mounted || authLoading || isDataLoading) {
     return (
       <div className="h-screen flex items-center justify-center text-white font-medium">
         <div className="flex flex-col items-center gap-4">

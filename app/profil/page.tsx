@@ -3,11 +3,19 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// 🔥 Unseren neuen Hook importieren
+import { useAuth } from "@/components/AuthProvider";
+
 export default function ProfilPage() {
-  const [user, setUser] = useState<any>(null);
+  // 🔥 BAM! User und Auth-Loading blitzschnell aus dem globalen State holen
+  const { user, loading: authLoading } = useAuth();
+
   const [profile, setProfile] = useState<any>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  
+  // 🔥 Eigener Loading-State für die Datenbank-Abfragen
+  const [isDataLoading, setIsDataLoading] = useState(true);
+  
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
@@ -16,25 +24,26 @@ export default function ProfilPage() {
   const [teamname, setTeamname] = useState("");
   const [captain, setCaptain] = useState("");
 
-  // 🔥 ALLE WICHTIGEN ROLLEN IDs
+  // ALLE WICHTIGEN ROLLEN IDs
   const TEAMVM_ROLE = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
   const ORGA_ROLE = "1492478735444873398";
   const SPIELER_ROLE = "1491812561119875154";
   const FREEAGENT_ROLE = "1492462347967664198";
 
   useEffect(() => {
-    const fetchData = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const currentUser = authData.user;
-      
-      if (!currentUser) {
-        setLoading(false);
-        return;
-      }
-      setUser(currentUser);
+    // Wenn der Auth-Provider noch lädt, warten wir einfach ab
+    if (authLoading) return;
 
+    // Wenn der Auth-Provider fertig ist, aber kein User eingeloggt ist, brechen wir ab
+    if (!user) {
+      setIsDataLoading(false);
+      return;
+    }
+
+    // 🔥 Ab hier wissen wir sicher: Der User ist eingeloggt! Jetzt holen wir seine Daten:
+    const fetchData = async () => {
       // Rollen von Discord Api abrufen
-      const discordId = currentUser.user_metadata?.provider_id;
+      const discordId = user.user_metadata?.provider_id;
       if (discordId) {
         try {
           const res = await fetch(`/api/discord/member?userId=${discordId}`);
@@ -49,7 +58,7 @@ export default function ProfilPage() {
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
-        .eq("id", currentUser.id)
+        .eq("id", user.id)
         .single();
         
       if (profileData) setProfile(profileData);
@@ -58,7 +67,7 @@ export default function ProfilPage() {
       const { data: teamData } = await supabase
         .from("teams")
         .select("*")
-        .eq("user_id", currentUser.id)
+        .eq("user_id", user.id)
         .single();
 
       if (teamData) {
@@ -67,11 +76,11 @@ export default function ProfilPage() {
         setCaptain(teamData.captain || "");
       }
 
-      setLoading(false);
+      setIsDataLoading(false);
     };
 
     fetchData();
-  }, []);
+  }, [user, authLoading]); // 🔥 Effect reagiert auf user und authLoading
 
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -112,9 +121,9 @@ export default function ProfilPage() {
     }
   };
 
-  if (loading) {
+  // 🔥 Kombinierter Loading-Check
+  if (authLoading || isDataLoading) {
     return (
-      // 🔥 Höhe angepasst
       <div className="min-h-[calc(100vh-100px)] flex items-center justify-center text-white">
         <div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
       </div>
@@ -123,7 +132,6 @@ export default function ProfilPage() {
 
   if (!user) {
     return (
-      // 🔥 Höhe angepasst
       <div className="min-h-[calc(100vh-100px)] flex flex-col items-center justify-center text-white">
         <h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2>
         <p className="text-gray-400">Bitte logge dich über Discord ein, um dein Profil zu sehen.</p>
@@ -143,7 +151,6 @@ export default function ProfilPage() {
   const hasPlayerRole = isSpieler || isFreeAgent;
 
   return (
-    // 🔥 GEÄNDERT: "min-h-screen" durch "min-h-[calc(100vh-100px)]" ersetzt gegen das Scroll-Problem
     <main className="min-h-[calc(100vh-100px)] px-4 sm:px-6 pt-24 md:pt-28 pb-8 w-full max-w-5xl mx-auto text-white">
       <h1 className="text-3xl md:text-4xl font-black mb-8 tracking-tight drop-shadow-md">
         Mein <span className="text-yellow-500">Profil</span>
@@ -225,7 +232,7 @@ export default function ProfilPage() {
             </div>
 
           ) : hasPlayerRole ? (
-            /* ZUSTAND 2: SPIELER / FREE AGENT -> IN ARBEIT KARTE MIT BILD (Wieder im originalen Detail-Look!) */
+            /* ZUSTAND 2: SPIELER / FREE AGENT -> IN ARBEIT KARTE MIT BILD */
             <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-10 shadow-xl flex flex-col items-center justify-center text-center h-full relative overflow-hidden">
               
               <div className="w-full max-w-sm mb-6 relative rounded-2xl overflow-hidden shadow-2xl shadow-black/60 border border-white/10 group cursor-pointer">

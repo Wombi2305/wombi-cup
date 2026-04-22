@@ -2,10 +2,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
+// 🔥 Unseren neuen Hook importieren
+import { useAuth } from "@/components/AuthProvider";
+
 export default function Anmelden() {
+  // 🔥 BAM! User und Ladezustand direkt aus dem globalen Mantel holen
+  const { user, loading: authLoading } = useAuth();
+
   // --- STATES ---
   const [tournaments, setTournaments] = useState<any[]>([]);
-  const [user, setUser] = useState<any>(null);
   const [teamname, setTeamname] = useState<{ [key: number]: string }>({});
   const [captain, setCaptain] = useState<{ [key: number]: string }>({});
   const [loading, setLoading] = useState<{ [key: number]: boolean }>({});
@@ -24,29 +29,8 @@ export default function Anmelden() {
   const requiredRoleId = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
   const hasRequiredRole = discordUser?.roles?.includes(requiredRoleId);
 
-  // --- INITIAL DATA & AUTH ---
+  // --- 1. TURNIERE & REALTIME (Unabhängig vom User) ---
   useEffect(() => {
-    const init = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const currentUser = authData.user;
-      setUser(currentUser);
-
-      if (currentUser) {
-        // Schauen, ob der User in der DB schon ein Profil-Team hat
-        const { data: team } = await supabase
-          .from("teams")
-          .select("teamname, captain")
-          .eq("user_id", currentUser.id)
-          .single();
-          
-        if (team) {
-          setExistingDbTeam(team);
-        }
-      }
-      setDbCheckDone(true); // Check abgeschlossen
-    };
-
-    init();
     fetchTournaments();
 
     const channel = supabase
@@ -65,10 +49,36 @@ export default function Anmelden() {
     };
   }, []);
 
-  // --- DISCORD FETCH (Nur einmal beim Laden der Seite prüfen) ---
+  // --- 2. USER DB CHECK (Wartet auf den useAuth Hook) ---
   useEffect(() => {
+    if (authLoading) return; // Warten, bis Auth-Status klar ist
+
+    const checkDbTeam = async () => {
+      if (user) {
+        // Schauen, ob der User in der DB schon ein Profil-Team hat
+        const { data: team } = await supabase
+          .from("teams")
+          .select("teamname, captain")
+          .eq("user_id", user.id)
+          .single();
+          
+        if (team) {
+          setExistingDbTeam(team);
+        }
+      }
+      setDbCheckDone(true); // Check abgeschlossen
+    };
+
+    checkDbTeam();
+  }, [user, authLoading]);
+
+  // --- 3. DISCORD FETCH (Wartet ebenfalls auf den useAuth Hook) ---
+  useEffect(() => {
+    if (authLoading) return;
+
     const checkDiscord = async () => {
-      const userId = localStorage.getItem("discord_user_id");
+      // Holt die ID sicher aus dem User-Objekt oder als Fallback aus dem LocalStorage
+      const userId = user?.user_metadata?.provider_id || localStorage.getItem("discord_user_id");
       
       if (!userId) {
         setDiscordUser(null);
@@ -94,11 +104,11 @@ export default function Anmelden() {
     };
     
     checkDiscord();
-  }, []);
+  }, [user, authLoading]);
 
-  // --- AUTOFILL LOGIK (GEFIXT) ---
+  // --- AUTOFILL LOGIK ---
   useEffect(() => {
-    // 🔥 FIX: Wir warten jetzt strikt, bis Turniere, Datenbank-Check UND Discord-Check FERTIG sind!
+    // 🔥 Wir warten strikt, bis Turniere, Datenbank-Check UND Discord-Check FERTIG sind!
     if (tournaments.length === 0 || !dbCheckDone || isCheckingDiscord) return;
 
     let defaultTeam = "";
@@ -120,7 +130,6 @@ export default function Anmelden() {
     setTeamname((prev) => {
       const updated = { ...prev };
       tournaments.forEach((t) => {
-        // Überschreibe, falls undefined oder noch komplett leer
         if (updated[t.id] === undefined || updated[t.id] === "") {
           updated[t.id] = defaultTeam;
         }
@@ -131,7 +140,6 @@ export default function Anmelden() {
     setCaptain((prev) => {
       const updated = { ...prev };
       tournaments.forEach((t) => {
-        // Überschreibe, falls undefined oder noch komplett leer
         if (updated[t.id] === undefined || updated[t.id] === "") {
           updated[t.id] = defaultCaptain;
         }

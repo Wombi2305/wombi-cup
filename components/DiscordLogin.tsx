@@ -1,71 +1,58 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+// 🔥 Unseren Hook importieren
+import { useAuth } from "@/components/AuthProvider";
 
 export default function DiscordLogin() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  // 🔥 User und Loading aus dem globalen State holen
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data } = await supabase.auth.getUser();
+    // Wenn wir noch laden oder kein User da ist, machen wir nichts.
+    if (loading || !user) return;
 
-      if (!data.user) {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      setUser(data.user);
-      const discordId = data.user.user_metadata?.provider_id;
+    const syncDiscordProfile = async () => {
+      const discordId = user.user_metadata?.provider_id;
 
       if (discordId) {
         localStorage.setItem("discord_user_id", discordId);
 
-        // 🚀 NEU: DATEN DIREKT VON DER API HOLEN
-        const res = await fetch(`/api/discord/member?userId=${discordId}`);
-        const discordData = await res.json();
+        try {
+          // 🚀 DATEN DIREKT VON DER API HOLEN
+          const res = await fetch(`/api/discord/member?userId=${discordId}`);
+          const discordData = await res.json();
 
-        console.log("DISCORD DATA:", discordData);
+          console.log("DISCORD DATA:", discordData);
 
-        // 👉 NUR NOCH discordData.roles NUTZEN
-        const roles = discordData?.roles || [];
-        console.log("ROLES FROM API:", roles);
+          // 👉 NUR NOCH discordData.roles NUTZEN
+          const roles = discordData?.roles || [];
+          console.log("ROLES FROM API:", roles);
 
-        // Check gegen die spezifische Orga-ID
-        const isAdmin = roles.some((r: any) => String(r) === "1492478735444873398");
-        console.log("IS ADMIN:", isAdmin);
+          // Check gegen die spezifische Orga-ID
+          const isAdmin = roles.some((r: any) => String(r) === "1492478735444873398");
+          console.log("IS ADMIN:", isAdmin);
 
-        // Profile Upsert mit den API-Daten
-        const { error } = await supabase.from("profiles").upsert({
-          id: data.user.id,
-          discord_id: discordId,
-          is_admin: isAdmin,
-        });
+          // Profile Upsert mit den API-Daten
+          const { error } = await supabase.from("profiles").upsert({
+            id: user.id,
+            discord_id: discordId,
+            is_admin: isAdmin,
+          });
 
-        if (error) console.log("PROFILE UPSERT ERROR:", error);
-      }
-
-      setLoading(false);
-    };
-
-    getUser();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        const sessionUser = session?.user ?? null;
-        setUser(sessionUser);
-        if (sessionUser?.user_metadata?.provider_id) {
-          localStorage.setItem("discord_user_id", sessionUser.user_metadata.provider_id);
+          if (error) console.log("PROFILE UPSERT ERROR:", error);
+        } catch (error) {
+           console.error("Fehler beim Discord-Sync:", error);
         }
       }
-    );
-
-    return () => {
-      listener.subscription.unsubscribe();
     };
-  }, []);
+
+    // Die Funktion ausführen, sobald ein User erkannt wurde
+    syncDiscordProfile();
+
+  // 🔥 Der Effect feuert immer dann, wenn sich der user ändert (z.B. nach einem Login)
+  }, [user, loading]);
 
   const login = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -77,7 +64,8 @@ export default function DiscordLogin() {
     if (error) console.error("Login Error:", error);
   };
 
-  if (user) return null;
+  // 🔥 Wenn der User da ist (oder wir noch laden), zeigen wir den Login-Button NICHT an.
+  if (user || loading) return null;
 
   return (
     <button

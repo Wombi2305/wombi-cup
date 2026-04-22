@@ -3,14 +3,20 @@
 import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
+// 🔥 Unseren Hook importieren
+import { useAuth } from "@/components/AuthProvider";
+
 interface KoPhaseProps {
   matches: any[];
   teams: any[];
-  user: any;
+  user?: any; // 🔥 Optional gemacht, damit die übergeordnete Seite nicht meckert
   koSize?: number;
 }
 
-export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) {
+export default function KoPhase({ matches, teams, koSize }: KoPhaseProps) {
+  
+  // 🔥 BAM! Die Komponente holt sich den User jetzt einfach selbst!
+  const { user } = useAuth();
 
   // ===============================
   // STATES
@@ -61,7 +67,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
   const currentMobileRound = activeMobileRound || (expectedRounds.length > 0 ? expectedRounds[0] : null);
 
-  // 🔥 WIEDER ZURÜCK: DYNAMISCHE NAMENSGEBUNG (Runde 1, Runde 2... Finale)
   const getRoundName = (round: number) => {
     if (round === 2) return "Finale";
     const roundIndex = expectedRounds.indexOf(round);
@@ -77,14 +82,11 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   const activeUserMatch = useMemo(() => {
     if (myKoMatches.length === 0) return null;
     
-    // Sortiere von frühster Runde zur spätesten
     const sortedMatches = [...myKoMatches].sort((a, b) => b.ko_round - a.ko_round);
     
-    // Nimm das erste Spiel, das noch NICHT bestätigt ist
     const unconfirmed = sortedMatches.find((m) => m.status !== "confirmed");
     if (unconfirmed) return unconfirmed;
     
-    // Falls alle Spiele bestätigt sind, nimm das letzte Match
     return sortedMatches[sortedMatches.length - 1];
   }, [myKoMatches]);
 
@@ -155,7 +157,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
             onClick={() => setIsModalOpen(true)} 
             className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md hover:scale-105 transition-transform"
           >
-            {/* 🔥 ANGEPASSTER BUTTON TEXT */}
             {getRoundName(activeUserMatch.ko_round)} eintragen
           </button>
         </div>
