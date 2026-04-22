@@ -25,9 +25,11 @@ export default function Anmelden() {
   const [existingDbTeam, setExistingDbTeam] = useState<any>(null);
   const [dbCheckDone, setDbCheckDone] = useState<boolean>(false);
 
-  // --- PRÜFUNG DER ROLLE ---
-  const requiredRoleId = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
-  const hasRequiredRole = discordUser?.roles?.includes(requiredRoleId);
+  // --- 🔥 FIX: PRÜFUNG DER ROLLE (ORGA & TEAMVM ERLAUBT) ---
+  const TEAMVM_ROLE = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
+  const ORGA_ROLE = "1492478735444873398"; // Orga Rolle hinzugefügt
+  
+  const hasRequiredRole = discordUser?.roles?.includes(TEAMVM_ROLE) || discordUser?.roles?.includes(ORGA_ROLE);
 
   // --- 1. TURNIERE & REALTIME (Unabhängig vom User) ---
   useEffect(() => {
@@ -72,14 +74,17 @@ export default function Anmelden() {
     checkDbTeam();
   }, [user, authLoading]);
 
-  // --- 3. DISCORD FETCH (Wartet ebenfalls auf den useAuth Hook) ---
+  // --- 3. 🔥 SPEED-UP: DISCORD FETCH (Parallelisiert) ---
   useEffect(() => {
-    if (authLoading) return;
-
     const checkDiscord = async () => {
-      // Holt die ID sicher aus dem User-Objekt oder als Fallback aus dem LocalStorage
-      const userId = user?.user_metadata?.provider_id || localStorage.getItem("discord_user_id");
+      // Wir holen uns die ID sofort aus dem Storage, um nicht auf authLoading warten zu müssen
+      const storedId = localStorage.getItem("discord_user_id");
+      const userId = user?.user_metadata?.provider_id || storedId;
       
+      // Wenn keine ID da ist, aber Auth noch lädt, warten wir noch kurz
+      if (!userId && authLoading) return;
+
+      // Wenn wir sicher keine ID haben -> abbrechen
       if (!userId) {
         setDiscordUser(null);
         setIsCheckingDiscord(false);
@@ -108,7 +113,7 @@ export default function Anmelden() {
 
   // --- AUTOFILL LOGIK ---
   useEffect(() => {
-    // 🔥 Wir warten strikt, bis Turniere, Datenbank-Check UND Discord-Check FERTIG sind!
+    // Wir warten strikt, bis Turniere, Datenbank-Check UND Discord-Check FERTIG sind!
     if (tournaments.length === 0 || !dbCheckDone || isCheckingDiscord) return;
 
     let defaultTeam = "";
