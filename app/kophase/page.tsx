@@ -1,57 +1,54 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import KoPhase from "@/components/KoPhase";
-import { useSearchParams } from "next/navigation"; // 🔥 NEU: Der Next.js Weg, um URLs zu lesen
+import { useSearchParams } from "next/navigation";
+import { useTournaments } from "@/components/TournamentProvider"; // 🔥 Nutzt den Cache
+import { useAuth } from "@/components/AuthProvider"; // 🔥 Nutzt den Auth-Cache
 
-// Die eigentliche Logik haben wir in eine Unter-Komponente ausgelagert
 function KoPhaseContent() {
-  const searchParams = useSearchParams(); // 🔥 NEU: Suchparameter auslesen
+  const searchParams = useSearchParams();
+  const { tournaments, loading: tournamentsLoading } = useTournaments();
+  const { user } = useAuth();
   
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
-  const [tournaments, setTournaments] = useState<any[]>([]);
   const [selectedTournament, setSelectedTournament] = useState<number | null>(null);
   const [teams, setTeams] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
 
-  // 1. User abrufen
+  // 🔥 SCHRITT 1: Nur Turniere filtern, deren ko_status "active" ist
+  const activeKoTournaments = useMemo(() => {
+    return tournaments.filter((t: any) => t.ko_status === "active");
+  }, [tournaments]);
+
+  // 🔥 SCHRITT 2: Das richtige Turnier beim Laden auswählen
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-  }, []);
+    if (tournamentsLoading || activeKoTournaments.length === 0) return;
 
-  // 2. Turniere laden & URL-Parameter prüfen
-  useEffect(() => {
-    const fetchTournaments = async () => {
-      const { data } = await supabase.from("tournaments").select("*").eq("status", "active");
-      
-      if (data && data.length > 0) {
-        setTournaments(data);
-        
-        // 🔥 NEU: Hier greifen wir jetzt die ID sicher über Next.js ab
-        const urlId = searchParams.get("tournamentId");
-        
-        if (urlId && data.some(t => t.id === Number(urlId))) {
-          setSelectedTournament(Number(urlId)); // Turnier aus der URL setzen
-        } else {
-          setSelectedTournament(data[0].id); // Fallback: Erstes Turnier
-        }
-      }
-      setLoading(false);
-    };
-    fetchTournaments();
-  }, [searchParams]); // 🔥 NEU: Reagiert, wenn sich die URL ändert
+    const urlId = searchParams.get("tournamentId");
+    const existsInKo = activeKoTournaments.find(t => t.id === Number(urlId));
 
-  // 3. Daten für K.O. Phase laden
+    if (urlId && existsInKo) {
+      setSelectedTournament(Number(urlId));
+    } else {
+      // Fallback: Wähle das erste Turnier aus, das K.O.-Phase "active" hat
+      setSelectedTournament(activeKoTournaments[0].id);
+    }
+  }, [searchParams, activeKoTournaments, tournamentsLoading]);
+
+  // SCHRITT 3: Matches und Teams für das gewählte Turnier laden
   useEffect(() => {
     if (!selectedTournament) return;
+
     const fetchData = async () => {
-      // 🔥 GEÄNDERT: Wir holen die Teams über die Verknüpfungstabelle
+      setLoadingMatches(true);
+      
       const { data: regData } = await supabase
         .from("tournament_registrations")
         .select("teams(*)")
-        .eq("tournament_id", selectedTournament);
+        .eq("tournament_id", selectedTournament)
+        .eq("status", "approved");
         
       const { data: m } = await supabase
         .from("matches")
@@ -59,46 +56,66 @@ function KoPhaseContent() {
         .eq("tournament_id", selectedTournament);
         
       if (regData) {
-        // Teams entpacken, damit die Child-Komponente nichts von dem Join merkt
         const extractedTeams = regData.map((r: any) => r.teams).filter(Boolean);
         setTeams(extractedTeams);
       }
-      
       if (m) setMatches(m);
+      
+      setLoadingMatches(false);
     };
+
     fetchData();
 
-    const channel = supabase.channel("kophase-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => fetchData())
+    // Realtime für Ergebnisse
+    const channel = supabase.channel(`ko-matches-${selectedTournament}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${selectedTournament}` }, () => fetchData())
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
   }, [selectedTournament]);
 
-  const currentTournament = tournaments.find(t => t.id === selectedTournament);
+  const currentTournament = activeKoTournaments.find(t => t.id === selectedTournament);
+
+  if (tournamentsLoading) {
+    return <div className="text-white/60 text-center mt-20 italic">Lade Turniere...</div>;
+  }
 
   return (
     <main className="px-4 md:px-6 pt-6 pb-12 text-white font-sans w-full max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold text-yellow-400 mb-6 uppercase tracking-widest italic">K.O. Phase</h1>
-
-      {/* Button-Leiste für Turniere */}
-      {tournaments.length > 1 && (
-        <div className="flex flex-wrap gap-2 mb-8">
-          {tournaments.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedTournament(t.id)}
-              className={`px-4 py-2 rounded-lg font-bold text-sm transition shadow-md ${selectedTournament === t.id ? "bg-yellow-500 text-black scale-105" : "border border-white/10 hover:bg-white/5"}`}
-            >
-              {t.name}
-            </button>
-          ))}
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-yellow-400 uppercase tracking-widest italic">K.O. Phase</h1>
+          <p className="text-gray-400 text-sm mt-1">Hier findest du alle Turniere im Final-Modus.</p>
         </div>
-      )}
 
-      {loading ? (
-        <div className="text-white/60 text-center mt-20">⏳ Lade K.O. Baum...</div>
-      ) : !selectedTournament ? (
-        <div className="text-gray-400 text-center mt-10">Kein aktives Turnier gefunden.</div>
+        {/* Turnier-Umschalter: Zeigt nur die an, die "active" im ko_status sind */}
+        {activeKoTournaments.length > 1 && (
+          <div className="flex flex-wrap gap-2">
+            {activeKoTournaments.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setSelectedTournament(t.id)}
+                className={`px-4 py-2 rounded-lg font-bold text-xs transition-all shadow-md ${
+                  selectedTournament === t.id 
+                  ? "bg-yellow-500 text-black scale-105" 
+                  : "bg-white/5 border border-white/10 hover:bg-white/10"
+                }`}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {activeKoTournaments.length === 0 ? (
+        <div className="bg-white/5 border border-white/10 rounded-3xl p-12 text-center">
+          <div className="text-5xl mb-4">🧊</div>
+          <h2 className="text-xl font-bold">Aktuell keine K.O. Phasen</h2>
+          <p className="text-gray-400 mt-2 max-w-md mx-auto">Sobald die Gruppenphasen beendet sind und die K.O.-Runden generiert wurden, erscheinen sie hier.</p>
+        </div>
+      ) : loadingMatches ? (
+        <div className="text-center mt-20 animate-pulse text-yellow-500/50 italic">Lade Spielplan...</div>
       ) : (
         <KoPhase 
           matches={matches} 
@@ -111,10 +128,9 @@ function KoPhaseContent() {
   );
 }
 
-// 🔥 NEU: Next.js verlangt, dass alles, was useSearchParams nutzt, in eine <Suspense> Klammer kommt
 export default function KoPhasePage() {
   return (
-    <Suspense fallback={<div className="h-screen flex items-center justify-center text-white">Lade K.O. Phase...</div>}>
+    <Suspense fallback={<div className="h-screen flex items-center justify-center text-white">Lade K.O. Bereich...</div>}>
       <KoPhaseContent />
     </Suspense>
   );
