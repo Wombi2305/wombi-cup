@@ -6,7 +6,6 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function Anmelden() {
-  // 🔥 BAM! User und Ladezustand direkt aus dem globalen Mantel holen
   const { user, loading: authLoading } = useAuth();
 
   // --- STATES ---
@@ -17,18 +16,17 @@ export default function Anmelden() {
   const [success, setSuccess] = useState<{ [key: number]: boolean }>({});
   const [message, setMessage] = useState<string | null>(null);
   
-  // 🔥 Ein einziger, extrem schneller Ladezustand für alle Hintergrund-Daten
   const [discordUser, setDiscordUser] = useState<any>(null);
   const [existingDbTeam, setExistingDbTeam] = useState<any>(null);
   const [dataLoaded, setDataLoaded] = useState<boolean>(false);
 
-  // --- PRÜFUNG DER ROLLE (ORGA & TEAMVM ERLAUBT) ---
+  // --- PRÜFUNG DER ROLLE ---
   const TEAMVM_ROLE = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
   const ORGA_ROLE = "1492478735444873398"; 
   
   const hasRequiredRole = discordUser?.roles?.includes(TEAMVM_ROLE) || discordUser?.roles?.includes(ORGA_ROLE);
 
-  // --- 1. TURNIERE & REALTIME (Unabhängig vom User) ---
+  // --- 1. TURNIERE & REALTIME ---
   useEffect(() => {
     fetchTournaments();
 
@@ -48,28 +46,34 @@ export default function Anmelden() {
     };
   }, []);
 
-  // --- 2. 🔥 SPEED-UP: PARALLELER DATEN-FETCH (DB + Discord) ---
+  // --- 2. 🔥 ULTRA SPEED-UP: DATEN LADEN ---
   useEffect(() => {
-    if (authLoading) return; // Wir warten nur kurz, bis der UseAuth-Hook fertig ist
+    if (authLoading) return; 
+
+    // WENN NICHT EINGELOGGT: Sofort abbrechen und alles auf fertig setzen (0 Sekunden Ladezeit!)
+    if (!user) {
+      setDiscordUser(null);
+      setExistingDbTeam(null);
+      setDataLoaded(true);
+      return;
+    }
 
     let isMounted = true;
 
     const loadAllData = async () => {
       const promises = [];
 
-      // Aufgabe 1: Supabase-Team laden
-      if (user) {
-        promises.push(
-          supabase.from("teams").select("teamname, captain").eq("user_id", user.id).single()
-            .then(({ data }) => {
-              if (data && isMounted) setExistingDbTeam(data);
-            })
-        );
-      }
+      // DB Check
+      promises.push(
+        supabase.from("teams").select("teamname, captain").eq("user_id", user.id).single()
+          .then(({ data }) => {
+            if (data && isMounted) setExistingDbTeam(data);
+          })
+      );
 
-      // Aufgabe 2: Discord-Rollen laden
+      // Discord Check
       const storedId = localStorage.getItem("discord_user_id");
-      const userId = user?.user_metadata?.provider_id || storedId;
+      const userId = user.user_metadata?.provider_id || storedId;
 
       if (userId) {
         promises.push(
@@ -82,10 +86,8 @@ export default function Anmelden() {
         );
       }
 
-      // 🔥 BEIDE Aufgaben gleichzeitig starten und warten, bis sie fertig sind
       await Promise.allSettled(promises);
       
-      // BAM! Alles fertig, UI freischalten
       if (isMounted) setDataLoaded(true);
     };
 
@@ -103,25 +105,19 @@ export default function Anmelden() {
     let defaultTeam = "";
     let defaultCaptain = "";
 
-    // 1. PRIORITÄT: Datenbank-Team (aus dem Profil)
     if (existingDbTeam) {
       defaultTeam = existingDbTeam.teamname;
       defaultCaptain = existingDbTeam.captain || "";
-    } 
-    // 2. PRIORITÄT: Discord Nickname (Fallback)
-    else if (discordUser && discordUser.nick) {
+    } else if (discordUser && discordUser.nick) {
       const parts = discordUser.nick.split("|");
       defaultTeam = parts[0] ? parts[0].trim() : discordUser.nick;
       defaultCaptain = parts[1] ? parts[1].trim() : "";
     }
 
-    // Felder initialisieren
     setTeamname((prev) => {
       const updated = { ...prev };
       tournaments.forEach((t) => {
-        if (updated[t.id] === undefined || updated[t.id] === "") {
-          updated[t.id] = defaultTeam;
-        }
+        if (updated[t.id] === undefined || updated[t.id] === "") updated[t.id] = defaultTeam;
       });
       return updated;
     });
@@ -129,29 +125,19 @@ export default function Anmelden() {
     setCaptain((prev) => {
       const updated = { ...prev };
       tournaments.forEach((t) => {
-        if (updated[t.id] === undefined || updated[t.id] === "") {
-          updated[t.id] = defaultCaptain;
-        }
+        if (updated[t.id] === undefined || updated[t.id] === "") updated[t.id] = defaultCaptain;
       });
       return updated;
     });
   }, [discordUser, tournaments, existingDbTeam, dataLoaded]);
 
-  // --- LOGIK FUNKTIONEN ---
   const fetchTournaments = async () => {
     const { data, error } = await supabase
       .from("tournaments")
-      .select(`
-        *, 
-        tournament_registrations(*, teams(*))
-      `)
+      .select(`*, tournament_registrations(*, teams(*))`)
       .order("start_time", { ascending: true });
 
-    if (error) {
-      console.error("Fehler beim Laden:", error);
-      return;
-    }
-    setTournaments(data || []);
+    if (!error) setTournaments(data || []);
   };
 
   const showMessage = (msg: string) => {
@@ -175,9 +161,8 @@ export default function Anmelden() {
 
   const handleSubmit = async (e: any, tournamentId: number) => {
     e.preventDefault();
-    if (!discordUser) return showMessage("Discord Login erforderlich!");
-    if (!hasRequiredRole) return showMessage("Dir fehlt die Berechtigung (TeamVM Rolle)!");
-    if (!user) return showMessage("Bitte logge dich zuerst ein!");
+    if (!user || !discordUser) return showMessage("Discord Login erforderlich!");
+    if (!hasRequiredRole) return showMessage("Dir fehlt die Berechtigung (TeamVM oder Orga Rolle)!");
     if (!teamname[tournamentId]) return showMessage("Bitte Teamname eingeben");
 
     setLoading((prev) => ({ ...prev, [tournamentId]: true }));
@@ -192,35 +177,21 @@ export default function Anmelden() {
           : "approved";
 
       let currentTeamId;
-      const { data: existingTeam } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("user_id", user.id)
-        .single();
+      const { data: existingTeam } = await supabase.from("teams").select("id").eq("user_id", user.id).single();
 
       if (existingTeam) {
         currentTeamId = existingTeam.id;
-        await supabase.from("teams").update({ 
-            teamname: teamname[tournamentId], 
-            captain: captain[tournamentId] 
-        }).eq("id", currentTeamId);
+        await supabase.from("teams").update({ teamname: teamname[tournamentId], captain: captain[tournamentId] }).eq("id", currentTeamId);
       } else {
         const { data: newTeam, error: teamError } = await supabase
             .from("teams")
             .insert([{ teamname: teamname[tournamentId], captain: captain[tournamentId], user_id: user.id }])
-            .select()
-            .single();
-        
+            .select().single();
         if (teamError) throw teamError;
         currentTeamId = newTeam.id;
       }
 
-      const { data: existingRegistration } = await supabase
-        .from("tournament_registrations")
-        .select("id")
-        .eq("team_id", currentTeamId)
-        .eq("tournament_id", tournamentId)
-        .single();
+      const { data: existingRegistration } = await supabase.from("tournament_registrations").select("id").eq("team_id", currentTeamId).eq("tournament_id", tournamentId).single();
 
       if (existingRegistration) {
         showMessage("⚠️ Du bist bereits angemeldet");
@@ -228,14 +199,7 @@ export default function Anmelden() {
         return;
       }
 
-      const { error: insertError } = await supabase.from("tournament_registrations").insert([
-        {
-          team_id: currentTeamId,
-          tournament_id: Number(tournamentId),
-          status: status,
-        },
-      ]);
-
+      const { error: insertError } = await supabase.from("tournament_registrations").insert([{ team_id: currentTeamId, tournament_id: Number(tournamentId), status: status }]);
       if (insertError) throw insertError;
 
       await fetchTournaments();
@@ -261,15 +225,11 @@ export default function Anmelden() {
             const approvedCount = registrations.filter((r: any) => r.status === "approved").length;
             const waiting = registrations.filter((r: any) => r.status === "waiting").length;
             const freeSpots = t.max_teams ? Math.max(t.max_teams - approvedCount, 0) : null;
-            
             const isFull = t.max_teams && approvedCount >= t.max_teams;
             const isReady = t.draw_finished === true;
-            
             const percent = t.max_teams ? Math.min((approvedCount / t.max_teams) * 100, 100) : 0;
-            
             const myRegistration = registrations.find((r: any) => r.teams?.user_id === user?.id);
             const myTeam = myRegistration ? myRegistration.teams : null;
-            
             const isSuccess = success[t.id];
 
             return (
@@ -312,15 +272,8 @@ export default function Anmelden() {
                 {/* ACTION AREA */}
                 {isReady ? (
                   <div className="flex flex-col gap-3 mt-auto">
-                    <div className="text-green-400 text-sm font-semibold animate-pulse text-center">
-                      🔴 Live – Gruppen verfügbar
-                    </div>
-                    <a
-                      href={`/tabelle?tournament=${t.id}`}
-                      className="w-full block p-3 md:p-4 rounded-xl bg-blue-600 text-white text-center font-semibold hover:bg-blue-500 transition hover:scale-[1.03]"
-                    >
-                      Zu den Gruppen →
-                    </a>
+                    <div className="text-green-400 text-sm font-semibold animate-pulse text-center">🔴 Live – Gruppen verfügbar</div>
+                    <a href={`/tabelle?tournament=${t.id}`} className="w-full block p-3 md:p-4 rounded-xl bg-blue-600 text-white text-center font-semibold hover:bg-blue-500 transition hover:scale-[1.03]">Zu den Gruppen →</a>
                   </div>
                 ) : myRegistration ? (
                   <div className="flex flex-col gap-3 mt-auto">
@@ -328,38 +281,31 @@ export default function Anmelden() {
                       <p className="text-green-400 text-sm md:text-base font-bold">✓ Angemeldet</p>
                       <p className="text-white text-xs md:text-sm opacity-70 truncate mt-1">{myTeam?.teamname}</p>
                     </div>
-                    <button
-                      onClick={() => handleDelete(myRegistration.id, t.id)}
-                      disabled={loading[t.id]}
-                      className="w-full p-3 md:p-4 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition font-semibold disabled:opacity-50 text-sm md:text-base"
-                    >
+                    <button onClick={() => handleDelete(myRegistration.id, t.id)} disabled={loading[t.id]} className="w-full p-3 md:p-4 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition font-semibold disabled:opacity-50 text-sm md:text-base">
                       {loading[t.id] ? "Wird abgemeldet..." : "Vom Turnier abmelden"}
                     </button>
                   </div>
-                ) : !dataLoaded ? (
-                  <div className="flex flex-col gap-3 mt-auto">
-                    <button disabled className="w-full p-3 md:p-4 rounded-xl bg-white/5 text-gray-400 font-semibold cursor-wait border border-white/10 animate-pulse text-sm md:text-base">
-                      Lade Daten...
-                    </button>
+                ) : authLoading || (user && !dataLoaded) ? (
+                  /* 🔥 NEU: SLEEKES SKELETON LOADING (nur für eingeloggte User während sie kurz warten) */
+                  <div className="flex flex-col gap-3 mt-auto animate-pulse">
+                    <div className="h-[52px] md:h-[56px] bg-white/5 rounded-xl w-full"></div>
+                    <div className="h-[52px] md:h-[56px] bg-white/5 rounded-xl w-full"></div>
+                    <div className="h-[52px] md:h-[56px] bg-white/10 rounded-xl w-full mt-1"></div>
                   </div>
                 ) : (
                   <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 mt-auto">
                     
-                    {!discordUser ? (
+                    {!user ? (
                         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 text-center">
-                            <p className="text-yellow-500 text-xs md:text-sm font-bold uppercase tracking-wider">
-                                Discord Login erforderlich
-                            </p>
+                            <p className="text-yellow-500 text-xs md:text-sm font-bold uppercase tracking-wider">Discord Login erforderlich</p>
                         </div>
                     ) : !hasRequiredRole ? (
                         <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
-                            <p className="text-red-500 text-xs md:text-sm font-bold uppercase tracking-wider">
-                                Rolle "TeamVM" erforderlich
-                            </p>
+                            <p className="text-red-500 text-xs md:text-sm font-bold uppercase tracking-wider">Rolle "TeamVM" erforderlich</p>
                         </div>
                     ) : null}
 
-                    {discordUser && hasRequiredRole && (
+                    {user && hasRequiredRole && (
                       <>
                         <input
                           type="text"
@@ -381,9 +327,9 @@ export default function Anmelden() {
                     )}
 
                     <button
-                      disabled={loading[t.id] || isSuccess || !discordUser || !hasRequiredRole}
+                      disabled={loading[t.id] || isSuccess || !user || !hasRequiredRole}
                       className={`w-full p-3 md:p-4 rounded-xl font-semibold transition text-sm md:text-base ${
-                        !discordUser || !hasRequiredRole
+                        !user || !hasRequiredRole
                           ? "bg-gray-800 text-gray-500 cursor-not-allowed border border-white/5"
                           : isSuccess 
                           ? "bg-green-600 cursor-default text-white" 
@@ -392,19 +338,7 @@ export default function Anmelden() {
                           : "bg-gradient-to-r from-red-600 to-red-500 text-white hover:scale-[1.03] shadow-lg shadow-red-500/20"
                       }`}
                     >
-                      {loading[t.id] ? (  
-                        "Wird angemeldet..."
-                      ) : !discordUser ? (
-                        "Anmeldung gesperrt"
-                      ) : !hasRequiredRole ? (
-                        "Fehlende Berechtigung"
-                      ) : isSuccess ? (
-                        "✅ Erfolgreich angemeldet!"
-                      ) : isFull ? (
-                        "Für Warteliste anmelden"
-                      ) : (
-                        "Jetzt teilnehmen"
-                      )}
+                      {loading[t.id] ? "Wird angemeldet..." : !user ? "Anmeldung gesperrt" : !hasRequiredRole ? "Fehlende Berechtigung" : isSuccess ? "✅ Erfolgreich angemeldet!" : isFull ? "Für Warteliste anmelden" : "Jetzt teilnehmen"}
                     </button>
                   </form>
                 )}
