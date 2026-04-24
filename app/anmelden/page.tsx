@@ -1,10 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useTournaments } from "@/components/TournamentProvider"; // 🔥 NEU
+import { useTournaments } from "@/components/TournamentProvider";
 
 export default function Anmelden() {
-  // 🔥 NUTZT JETZT DEN GLOBALEN CACHE
   const { tournaments, loading: tournamentsLoading, refreshTournaments } = useTournaments();
 
   const [user, setUser] = useState<any>(null);
@@ -29,18 +28,21 @@ export default function Anmelden() {
       setUser(currentUser);
 
       if (currentUser) {
-        const { data: team } = await supabase
+        // 🔥 GEÄNDERT: Wir holen ALLE Teams und suchen das Aktive
+        const { data: teams } = await supabase
           .from("teams")
-          .select("teamname, captain")
-          .eq("user_id", currentUser.id)
-          .single();
-        if (team) setExistingDbTeam(team);
+          .select("id, teamname, captain, is_active")
+          .eq("user_id", currentUser.id);
+        
+        if (teams && teams.length > 0) {
+          // Wir suchen das Team mit is_active = true, falls keins aktiv ist, nehmen wir das erste (Fallback)
+          const activeTeam = teams.find((t: any) => t.is_active) || teams[0];
+          setExistingDbTeam(activeTeam);
+        }
       }
       setDbCheckDone(true);
     };
     init();
-
-    // 🔥 Realtime-Channel hier gelöscht, da er jetzt im Provider ist!
   }, []);
 
   useEffect(() => {
@@ -109,7 +111,7 @@ export default function Anmelden() {
     } else {
       showMessage("👋 Erfolgreich abgemeldet");
       setSuccess((prev) => ({ ...prev, [tournamentId]: false }));
-      refreshTournaments(); // 🔥 Cache aktualisieren
+      refreshTournaments(); 
     }
     setLoading((prev) => ({ ...prev, [tournamentId]: false }));
   };
@@ -132,13 +134,32 @@ export default function Anmelden() {
           : "approved";
 
       let currentTeamId;
-      const { data: existingTeam } = await supabase.from("teams").select("id").eq("user_id", user.id).single();
+      
+      // 🔥 GEÄNDERT: Auch hier greifen wir uns das AKTIVE Team!
+      const { data: teams } = await supabase
+        .from("teams")
+        .select("id, is_active")
+        .eq("user_id", user.id);
 
-      if (existingTeam) {
-        currentTeamId = existingTeam.id;
-        await supabase.from("teams").update({ teamname: teamname[tournamentId], captain: captain[tournamentId] }).eq("id", currentTeamId);
+      const activeTeam = teams?.find((t) => t.is_active) || (teams && teams[0]);
+
+      if (activeTeam) {
+        currentTeamId = activeTeam.id;
+        await supabase
+          .from("teams")
+          .update({ teamname: teamname[tournamentId], captain: captain[tournamentId] })
+          .eq("id", currentTeamId);
       } else {
-        const { data: newTeam, error: teamError } = await supabase.from("teams").insert([{ teamname: teamname[tournamentId], captain: captain[tournamentId], user_id: user.id }]).select().single();
+        const { data: newTeam, error: teamError } = await supabase
+          .from("teams")
+          .insert([{ 
+            teamname: teamname[tournamentId], 
+            captain: captain[tournamentId], 
+            user_id: user.id,
+            is_active: true // Direkt als aktiv setzen!
+          }])
+          .select()
+          .single();
         if (teamError) throw teamError;
         currentTeamId = newTeam.id;
       }
@@ -146,7 +167,7 @@ export default function Anmelden() {
       const { error: insertError } = await supabase.from("tournament_registrations").insert([{ team_id: currentTeamId, tournament_id: Number(tournamentId), status: status }]);
       if (insertError) throw insertError;
 
-      refreshTournaments(); // 🔥 Cache aktualisieren
+      refreshTournaments(); 
       setSuccess((prev) => ({ ...prev, [tournamentId]: true }));
       showMessage(status === "approved" ? "✅ Team angemeldet!" : "🕒 Warteliste aktiv");
     } catch (err) {
@@ -155,7 +176,6 @@ export default function Anmelden() {
     setLoading((prev) => ({ ...prev, [tournamentId]: false }));
   };
 
-  // Ladescreen vom Cache nutzen
   if (tournamentsLoading) {
     return <div className="h-screen flex items-center justify-center text-white">Lade Turniere...</div>;
   }
