@@ -259,7 +259,6 @@ export default function ProfilPage() {
 
   return (
     <>
-      {/* 🔥 GEÄNDERT: pt-16 md:pt-20 anstatt pt-24 md:pt-28, um alles nach oben zu verschieben */}
       <main className="min-h-[calc(100vh-100px)] px-4 sm:px-6 pt-16 md:pt-10 pb-8 w-full max-w-5xl mx-auto text-white">
         <h1 className="text-3xl md:text-4xl font-black mb-8 tracking-tight drop-shadow-md">
           Mein <span className="text-yellow-500">Profil</span>
@@ -343,22 +342,23 @@ export default function ProfilPage() {
                       </div>
                     </div>
 
+                    {/* 🔥 STATS GRID (Aktualisierte Beschriftung und Reihenfolge) */}
                     <div className="grid grid-cols-5 gap-2 sm:gap-3 text-center text-xs text-gray-400 mt-6">
                       <div className="bg-white/5 border border-white/5 rounded-xl p-2 flex flex-col justify-center">
                         <span className="text-white font-black text-base sm:text-lg">{currentTeam.participations || 0}</span>
-                        <span className="truncate">Spiele</span>
+                        <span className="truncate">Teilnahmen</span>
                       </div>
                       <div className="bg-white/5 border border-white/5 rounded-xl p-2 flex flex-col justify-center">
-                        <span className="text-white font-black text-base sm:text-lg">{currentTeam.wins_top5 || 0}</span>
-                        <span className="truncate">Top 5</span>
+                        <span className="text-white font-black text-base sm:text-lg">{currentTeam.wins_top1 || 0}</span>
+                        <span className="truncate">Cup Siege</span>
                       </div>
                       <div className="bg-white/5 border border-white/5 rounded-xl p-2 flex flex-col justify-center">
                         <span className="text-white font-black text-base sm:text-lg">{currentTeam.wins_top3 || 0}</span>
                         <span className="truncate">Top 3</span>
                       </div>
                       <div className="bg-white/5 border border-white/5 rounded-xl p-2 flex flex-col justify-center">
-                        <span className="text-white font-black text-base sm:text-lg">{currentTeam.wins_top1 || 0}</span>
-                        <span className="truncate">Wins</span>
+                        <span className="text-white font-black text-base sm:text-lg">{currentTeam.wins_top5 || 0}</span>
+                        <span className="truncate">Top 5</span>
                       </div>
                       <div className="bg-white/5 border border-white/5 rounded-xl p-2 flex flex-col justify-center">
                         <span className="text-white font-black text-base sm:text-lg">{currentTeam.total_goals_scored || 0}</span>
