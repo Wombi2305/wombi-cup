@@ -77,6 +77,10 @@ export default function DiscordLogin() {
     if (error) console.error("Login Error:", error);
   };
 
+  // 🔥 FIX: Solange die Daten noch geladen werden, zeige gar nichts an.
+  // Das verhindert den "Flash" des Login-Buttons.
+  if (loading) return null;
+
   if (user) return null;
 
   return (

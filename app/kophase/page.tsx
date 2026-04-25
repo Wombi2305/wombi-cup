@@ -24,7 +24,12 @@ function KoPhaseContent() {
   // 2. Turniere laden & URL-Parameter prüfen
   useEffect(() => {
     const fetchTournaments = async () => {
-      const { data } = await supabase.from("tournaments").select("*").eq("status", "active");
+      // 🔥 ANGEPASST: Hier filtern wir nach status "active" UND has_ko_phase "true"
+      const { data } = await supabase
+        .from("tournaments")
+        .select("*")
+        .eq("status", "active")
+        .eq("has_ko_phase", true);
       
       if (data && data.length > 0) {
         setTournaments(data);
@@ -98,7 +103,7 @@ function KoPhaseContent() {
       {loading ? (
         <div className="text-white/60 text-center mt-20">⏳ Lade K.O. Baum...</div>
       ) : !selectedTournament ? (
-        <div className="text-gray-400 text-center mt-10">Kein aktives Turnier gefunden.</div>
+        <div className="text-gray-400 text-center mt-10">Kein aktives Turnier mit K.O. Phase gefunden.</div>
       ) : (
         <KoPhase 
           matches={matches} 

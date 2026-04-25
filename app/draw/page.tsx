@@ -7,6 +7,32 @@ const shuffleGroups = (groups: string[]) => {
   return [...groups].sort(() => Math.random() - 0.5);
 };
 
+// 🔥 HELPER: Holt das passende Bild
+const getTierImage = (level: number) => {
+  const l = level || 1;
+  if (l >= 45) return "/Prisma.png";
+  if (l >= 40) return "/Amethyst.png";
+  if (l >= 35) return "/Sapphire.png";
+  if (l >= 30) return "/Emerald.png";
+  if (l >= 25) return "/Ruby.png";
+  if (l >= 20) return "/Gold.png";
+  if (l >= 10) return "/Silber.png";
+  return "/Bronze.png";
+};
+
+// 🔥 NEUER HELPER: Holt die passende Farbe für den Hintergrund & Rahmen
+const getTierColors = (level: number) => {
+  const l = level || 1;
+  if (l >= 45) return "bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-50"; // Prisma
+  if (l >= 40) return "bg-purple-500/20 border-purple-500/40 text-purple-50"; // Amethyst
+  if (l >= 35) return "bg-blue-500/20 border-blue-500/40 text-blue-50"; // Sapphire
+  if (l >= 30) return "bg-emerald-500/20 border-emerald-500/40 text-emerald-50"; // Emerald
+  if (l >= 25) return "bg-red-500/20 border-red-500/40 text-red-50"; // Ruby
+  if (l >= 20) return "bg-yellow-500/20 border-yellow-500/40 text-yellow-50"; // Gold
+  if (l >= 10) return "bg-slate-400/20 border-slate-400/40 text-slate-50"; // Silber
+  return "bg-amber-700/20 border-amber-700/40 text-amber-50"; // Bronze
+};
+
 export default function DrawPage() {
   const [authorized, setAuthorized] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
@@ -17,8 +43,9 @@ export default function DrawPage() {
   const [teams, setTeams] = useState<any[]>([]);
   const [shuffled, setShuffled] = useState<any[]>([]);
   const [drawIndex, setDrawIndex] = useState(0);
-  const [currentTeam, setCurrentTeam] = useState<any>(null);
-  const [displayName, setDisplayName] = useState("");
+  
+  const [displayTeam, setDisplayTeam] = useState<any>(null); 
+  
   const [groups, setGroups] = useState<any>({});
   const [isDrawing, setIsDrawing] = useState(false);
   const [finished, setFinished] = useState(false);
@@ -57,11 +84,7 @@ export default function DrawPage() {
         ];
 
         const roles = data.roles || [];
-
-        const hasAccess = roles.some((r: string) =>
-          ALLOWED_ROLES.includes(r)
-        );
-
+        const hasAccess = roles.some((r: string) => ALLOWED_ROLES.includes(r));
         setAuthorized(hasAccess);
       } catch (error) {
         console.error("Auth check failed", error);
@@ -98,7 +121,6 @@ export default function DrawPage() {
 
       const fullTournaments = [];
       for (const t of tournamentsData) {
-        // 🔥 GEÄNDERT: Zählt nun die Teams in tournament_registrations
         const { count } = await supabase
           .from("tournament_registrations")
           .select("*", { count: "exact", head: true })
@@ -112,7 +134,6 @@ export default function DrawPage() {
 
     fetchTournaments();
 
-    // 🔥 GEÄNDERT: Hört nun auch auf tournament_registrations
     const channel = supabase.channel("draw-tournaments")
       .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, () => fetchTournaments())
       .on("postgres_changes", { event: "*", schema: "public", table: "tournament_registrations" }, () => fetchTournaments())
@@ -143,26 +164,26 @@ export default function DrawPage() {
     if (selectedTournament) fetchTeams();
   }, [selectedTournament]);
 
-  // 🔥 GEÄNDERT: Holt die Teams über den JOIN aus tournament_registrations
   const fetchTeams = async () => {
     if (!selectedTournament) return;
+    
     const { data } = await supabase
       .from("tournament_registrations")
-      .select("teams(*)")
+      .select(`
+        teams (
+          id,
+          teamname,
+          level
+        )
+      `)
       .eq("tournament_id", selectedTournament)
       .eq("status", "approved");
       
     if (data) {
-      // Wir entpacken das Array, damit es genau die alte Struktur für die UI hat
       const extractedTeams = data.map((r: any) => r.teams).filter(Boolean);
       setTeams(extractedTeams);
       setShuffled([...extractedTeams].sort(() => Math.random() - 0.5));
     }
-  };
-
-  const logout = async () => {
-    await supabase.auth.signOut();
-    window.location.reload();
   };
 
   const resetDraw = () => {
@@ -171,7 +192,7 @@ export default function DrawPage() {
     setGroups({});
     setDrawIndex(0);
     setFinished(false);
-    setDisplayName("");
+    setDisplayTeam(null);
     setRevealedTeam(null);
     setTargetGroup(null);
     setLastGroup(null);
@@ -219,12 +240,12 @@ export default function DrawPage() {
       let speed = 50;
       const tick = () => {
         const randomTeam = teams[Math.floor(Math.random() * teams.length)];
-        setDisplayName(randomTeam.teamname);
+        setDisplayTeam(randomTeam); 
         elapsed += speed;
         speed += 10;
         if (elapsed < duration) setTimeout(tick, speed);
         else {
-          setDisplayName(realTeam.teamname);
+          setDisplayTeam(realTeam);
           resolve();
         }
       };
@@ -248,7 +269,7 @@ export default function DrawPage() {
     setIsDrawing(true);
     const team = shuffled[drawIndex];
     await runSlotMachine(team);
-    setDisplayName("");
+    setDisplayTeam(null);
     setRevealedTeam(team);
 
     const group = getNextGroup();
@@ -306,15 +327,13 @@ export default function DrawPage() {
   }
 
   const progress = shuffled.length > 0 ? (drawIndex / shuffled.length) * 100 : 0;
+  const isAllDrawn = shuffled.length > 0 && drawIndex >= shuffled.length;
 
   return (
-    <main className="min-h-screen text-white flex flex-col items-center justify-start pt-20 px-4 md:px-10 overflow-hidden w-full mt-[-64px] sm:mt-[-80px]">
+    <main className="min-h-screen text-white flex flex-col items-center justify-start pt-12 px-4 md:px-10 overflow-hidden w-full mt-[-64px] sm:mt-[-80px]">
       
       {!drawStarted && (
-        <div className="flex flex-col items-center w-full relative pt-24">
-          <div className="absolute top-[-1rem] right-0">
-            <button onClick={logout} className="text-gray-400 hover:text-white transition text-sm bg-white/5 px-3 py-1 rounded-lg md:bg-transparent md:px-0 md:py-0">Logout</button>
-          </div>
+        <div className="flex flex-col items-center w-full relative pt-8">
           
           <h1 className="text-3xl md:text-5xl font-black mb-8 md:mb-10 tracking-tight text-white text-center">🎰 Auslosung 🎰</h1>
 
@@ -342,37 +361,55 @@ export default function DrawPage() {
       )}
 
       {drawStarted && (
-        <div className="w-full flex flex-col items-center pt-24">
+        <div className="w-full flex flex-col items-center pt-8">
           <div className="w-full flex flex-col md:flex-row justify-between items-center mb-6 max-w-7xl gap-4">
             <button onClick={resetDraw} className="bg-white/10 px-4 py-2 rounded-lg hover:bg-white/20 transition text-sm w-full md:w-auto text-center order-2 md:order-1">← Zurück</button>
             <h1 className="text-2xl md:text-3xl font-black tracking-wide text-center order-1 md:order-2">🎰 Auslosung</h1>
-            <button onClick={logout} className="text-gray-500 hover:text-white transition text-xs hidden md:block order-3">Logout</button>
+            <div className="hidden md:block w-[88px] order-3"></div>
           </div>
 
           <div className="flex flex-col items-center w-full max-w-7xl">
-            <div className="text-xs md:text-sm text-yellow-400 mb-1 font-bold tracking-widest text-center">FORTSCHRITT: {drawIndex} / {shuffled.length}</div>
+            <div className={`text-xs md:text-sm mb-1 font-bold tracking-widest text-center transition-colors duration-500 ${isAllDrawn ? "text-green-400" : "text-yellow-400"}`}>
+              TEAMS AUSGELOST: {drawIndex} / {shuffled.length}
+            </div>
+            
             <div className="w-full max-w-[500px] bg-white/10 h-2 rounded-full mb-8 overflow-hidden">
-              <div className="bg-yellow-500 h-full transition-all duration-500" style={{ width: `${progress}%` }} />
+              <div 
+                className={`h-full transition-all duration-500 ${isAllDrawn ? "bg-green-500" : "bg-yellow-500"}`} 
+                style={{ width: `${progress}%` }} 
+              />
             </div>
 
-            <div className="min-h-[5rem] flex items-center justify-center mb-10 w-full px-2">
-              {revealedTeam ? (
-                <div className="w-full max-w-[400px] text-center px-4 md:px-10 py-3 md:py-5 rounded-2xl bg-yellow-500 text-black font-bold text-2xl md:text-3xl shadow-xl animate-fadeIn truncate">{revealedTeam.teamname}</div>
-              ) : displayName ? (
-                <div className="w-full max-w-[400px] text-center bg-yellow-500/10 border border-yellow-400 px-4 md:px-10 py-3 md:py-5 rounded-2xl text-2xl md:text-3xl font-bold text-yellow-400 animate-pulse truncate">{displayName}</div>
-              ) : (
-                <div className="h-[4rem] md:h-[5rem]"></div>
-              )}
-            </div>
+            {drawIndex < shuffled.length && (
+              <div className="min-h-[6rem] md:min-h-[8rem] flex items-center justify-center mb-10 w-full px-2">
+                {revealedTeam ? (
+                  <div className="flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] px-6 md:px-10 py-4 rounded-2xl bg-yellow-500 text-black font-bold text-3xl md:text-4xl shadow-[0_0_40px_rgba(255,200,0,0.4)] animate-fadeIn">
+                    <img src={getTierImage(revealedTeam.level)} alt="Rank" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-xl shrink-0" />
+                    <span className="whitespace-nowrap tracking-tight">{revealedTeam.teamname}</span>
+                  </div>
+                ) : displayTeam ? (
+                  <div className="flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] bg-yellow-500/10 border-2 border-yellow-400 px-6 md:px-10 py-4 rounded-2xl text-3xl md:text-4xl font-bold text-yellow-400 animate-pulse">
+                    <img src={getTierImage(displayTeam.level)} alt="Rank" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg opacity-90 shrink-0" />
+                    <span className="whitespace-nowrap tracking-tight">{displayTeam.teamname}</span>
+                  </div>
+                ) : (
+                  <div className="h-[6rem] md:h-[8rem]"></div>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 md:gap-6 justify-center w-full mb-10">
               {groupNames.map((group) => (
-                <div key={group} className={`p-4 rounded-2xl w-full max-w-[280px] mx-auto flex flex-col transition-all duration-300 border ${targetGroup === group || lastGroup === group ? "border-yellow-400 shadow-[0_0_30px_rgba(255,200,0,0.5)] scale-105 bg-yellow-500/10" : "bg-[#111] border-white/10 shadow-lg"}`}>
-                  <h2 className={`font-bold text-lg md:text-xl mb-2 border-b border-white/10 pb-2 text-center ${targetGroup === group || lastGroup === group ? "text-yellow-300" : "text-yellow-400"}`}>GRUPPE {group}</h2>
-                  <div className="flex flex-col gap-2 mt-3 max-h-[200px] md:max-h-[220px] overflow-y-auto pr-1">
+                <div key={group} className={`p-4 rounded-2xl w-full max-w-[280px] md:max-w-[300px] mx-auto flex flex-col transition-all duration-300 border ${targetGroup === group || lastGroup === group ? "border-yellow-400 shadow-[0_0_30px_rgba(255,200,0,0.5)] scale-105 bg-yellow-500/10" : "bg-[#111] border-white/10 shadow-lg"}`}>
+                  <h2 className={`font-bold text-lg md:text-xl mb-3 border-b border-white/10 pb-2 text-center ${targetGroup === group || lastGroup === group ? "text-yellow-300" : "text-yellow-400"}`}>GRUPPE {group}</h2>
+                  <div className="flex flex-col gap-2 mt-2 max-h-[250px] md:max-h-[300px] overflow-y-auto pr-1">
                     {groups[group]?.length === 0 && <div className="text-gray-600 text-sm text-center mt-4">WARTEN...</div>}
+                    
                     {groups[group]?.map((team: any, index: number) => (
-                      <div key={index} className="h-[40px] md:h-[42px] shrink-0 flex items-center justify-center bg-white/10 border border-white/5 rounded-lg px-2 text-xs md:text-sm font-medium text-center truncate animate-fadeIn">{team.teamname}</div>
+                      <div key={index} className={`h-[44px] shrink-0 flex items-center justify-start border rounded-lg px-3 gap-3 text-sm font-bold animate-fadeIn ${getTierColors(team.level)}`}>
+                        <img src={getTierImage(team.level)} alt="Rank" className="w-7 h-7 md:w-8 md:h-8 object-contain drop-shadow-md shrink-0" />
+                        <span className="whitespace-nowrap tracking-tight">{team.teamname}</span>
+                      </div>
                     ))}
                   </div>
                 </div>

@@ -4,6 +4,32 @@ import { useEffect, useState, Fragment, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
+// 🔥 HELPER: Holt das passende Bild
+const getTierImage = (level: number) => {
+  const l = level || 1;
+  if (l >= 45) return "/Prisma.png";
+  if (l >= 40) return "/Amethyst.png";
+  if (l >= 35) return "/Sapphire.png";
+  if (l >= 30) return "/Emerald.png";
+  if (l >= 25) return "/Ruby.png";
+  if (l >= 20) return "/Gold.png";
+  if (l >= 10) return "/Silber.png";
+  return "/Bronze.png";
+};
+
+// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen
+const getTierColors = (level: number) => {
+  const l = level || 1;
+  if (l >= 45) return "bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-50"; // Prisma
+  if (l >= 40) return "bg-purple-500/20 border-purple-500/40 text-purple-50"; // Amethyst
+  if (l >= 35) return "bg-blue-500/20 border-blue-500/40 text-blue-50"; // Sapphire
+  if (l >= 30) return "bg-emerald-500/20 border-emerald-500/40 text-emerald-50"; // Emerald
+  if (l >= 25) return "bg-red-500/20 border-red-500/40 text-red-50"; // Ruby
+  if (l >= 20) return "bg-yellow-500/20 border-yellow-500/40 text-yellow-50"; // Gold
+  if (l >= 10) return "bg-slate-400/20 border-slate-400/40 text-slate-50"; // Silber
+  return "bg-amber-700/20 border-amber-700/40 text-amber-50"; // Bronze
+};
+
 export default function TurnierTabelle() {
   const router = useRouter();
 
@@ -35,9 +61,10 @@ export default function TurnierTabelle() {
     color_middle: currentTournamentData.color_middle || "#f97316",
   };
 
+  // 🔥 GEÄNDERT: Wir speichern das ganze Team-Objekt ab, um ans Level zu kommen
   const teamMap = useMemo(() => {
     const map: any = {};
-    teams.forEach((t) => { map[t.id] = t.teamname; });
+    teams.forEach((t) => { map[t.id] = t; });
     return map;
   }, [teams]);
 
@@ -71,7 +98,8 @@ export default function TurnierTabelle() {
   const calculateTable = (groupTeams: any[], groupMatches: any[]) => {
     const table: any = {};
     groupTeams.forEach((team) => {
-      table[team.id] = { id: team.id, name: team.teamname, sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 };
+      // 🔥 GEÄNDERT: Level wird in die Tabellen-Berechnung mitgenommen
+      table[team.id] = { id: team.id, name: team.teamname, level: team.level, sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 };
     });
 
     groupMatches.forEach((m) => {
@@ -151,7 +179,6 @@ export default function TurnierTabelle() {
     setLoadingData(false);
   };
 
-  // 🔥 GEÄNDERT: Holt die Teams nun aus der Registrierungstabelle
   const fetchData = async (isBackground = false) => {
     if (!isBackground && !isReady) setLoadingData(true);
     
@@ -159,7 +186,7 @@ export default function TurnierTabelle() {
       .from("tournament_registrations")
       .select("teams(*)")
       .eq("tournament_id", selectedTournament)
-      .eq("status", "approved"); // Wir wollen nur die bestätigten Teams in der Tabelle
+      .eq("status", "approved"); 
       
     const { data: m } = await supabase.from("matches").select("*").eq("tournament_id", selectedTournament);
     const { data: g } = await supabase.from("group_assignments").select("*").eq("tournament_id", selectedTournament);
@@ -188,7 +215,7 @@ export default function TurnierTabelle() {
     setLoadingData(false);
   };
 
-  const getTeamName = (id: number) => teamMap[id] || "Team";
+  const getTeamName = (id: number) => teamMap[id]?.teamname || "Team";
 
   const updateScoreInput = (matchId: number, key: string, value: string) => {
     setScores((prev: any) => ({ ...prev, [matchId]: { ...(prev[matchId] || {}), [key]: value.replace(/[^0-9]/g, "") } }));
@@ -228,7 +255,6 @@ export default function TurnierTabelle() {
         </div>
 
         <div className="flex gap-2 flex-wrap items-center">
-          {/* 🔥 DYNAMISCHER BUTTON WIE IN KO PHASE */}
           {activeUserMatch && (
             <button 
               onClick={() => setActiveRound(activeUserMatch.round)} 
@@ -252,16 +278,18 @@ export default function TurnierTabelle() {
             const table = currentTables[groupName] || [];
             return (
               <Fragment key={groupName}>
+                
+                {/* 🔥 TABELLE */}
                 <div className="border border-yellow-500/30 rounded-xl p-4 shadow-xl backdrop-blur-sm bg-black/40 min-h-[400px] overflow-hidden">
                   <div className="mb-3 border-b border-yellow-500/30 pb-2">
                     <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Gruppe {groupName}</span>
                   </div>
                   <div className="w-full overflow-x-auto pb-2">
                     <div className="min-w-[340px]">
-                      <div className="grid grid-cols-9 text-[10px] md:text-xs uppercase text-gray-400 mb-2 px-1 text-center font-bold italic">
+                      <div className="grid grid-cols-12 text-[10px] md:text-xs uppercase text-gray-400 mb-2 px-1 text-center font-bold italic">
                         <span>#</span>
                         <span>Pkt</span>
-                        <span className="text-left col-span-2">Team</span>
+                        <span className="text-left col-span-5">Team</span>
                         <span>Sp</span>
                         <span>G</span>
                         <span>U</span>
@@ -278,11 +306,19 @@ export default function TurnierTabelle() {
                               background: isTop ? tournamentStyle.color_top + "20" : isBottom ? tournamentStyle.color_bottom + "20" : tournamentStyle.color_middle + "20", 
                               borderLeft: `4px solid ${isTop ? tournamentStyle.color_top : isBottom ? tournamentStyle.color_bottom : tournamentStyle.color_middle}` 
                             }} 
-                            className="grid grid-cols-9 text-xs md:text-sm py-2.5 border-b border-white/5 items-center text-center transition-colors hover:bg-white/5"
+                            className="grid grid-cols-12 text-xs md:text-sm py-2 border-b border-white/5 items-center text-center transition-colors hover:bg-white/5"
                           >
                             <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-lg md:text-xl" : "text-yellow-400 text-base md:text-xl"}`}>{i + 1}</span>
                             <span className="text-white/90 font-bold text-sm">{team.pkt}</span>
-                            <span className="text-left truncate pr-2 font-medium col-span-2">{team.name}</span>
+                            
+                            {/* 🔥 TEAM BADGE IN TABELLE */}
+                            <div className="col-span-5 flex items-center justify-start pr-2">
+                                <div className={`flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold w-full ${getTierColors(team.level)}`}>
+                                  <img src={getTierImage(team.level)} alt="Rank" className="w-8 h-8 object-contain shrink-0" />
+                                  <span className="whitespace-nowrap">{team.name}</span>
+                                </div>
+                            </div>
+                            
                             <span>{team.sp}</span>
                             <span className="text-green-400 font-bold">{team.g}</span>
                             <span>{team.u}</span>
@@ -295,6 +331,7 @@ export default function TurnierTabelle() {
                   </div>
                 </div>
 
+                {/* 🔥 SPIELPLAN */}
                 {activeGroup !== "ALL" && (
                   <div className="border border-yellow-500/30 rounded-xl p-4 shadow-xl backdrop-blur-sm bg-black/40 flex flex-col min-h-[400px]">
                     <div className="mb-4 border-b border-yellow-500/30 pb-2">
@@ -306,12 +343,22 @@ export default function TurnierTabelle() {
                           <div className="text-xs text-gray-400 mb-2 uppercase tracking-widest">Spieltag {round}</div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
                             {games.map((m: any) => (
-                              <div key={m.id} className="flex justify-between items-center text-xs bg-white/5 hover:bg-white/10 transition px-3 py-2 rounded-lg border border-white/5">
-                                <span className="w-2/5 text-left truncate text-xs md:text-[11px] font-medium">{getTeamName(m.team1_id)}</span>
-                                <span className="w-1/5 text-center text-yellow-400 font-bold bg-black/40 py-1 rounded whitespace-nowrap">
+                              <div key={m.id} className="flex justify-between items-center text-xs bg-white/5 hover:bg-white/10 transition px-2 py-2 rounded-lg border border-white/5">
+                                
+                                {/* 🔥 TEAM 1 IM SPIELPLAN (Ohne Rahmen und Icon) */}
+                                <div className="w-[40%] text-left truncate text-xs font-bold text-white/90">
+                                  {getTeamName(m.team1_id)}
+                                </div>
+
+                                <span className="w-[15%] mx-1 text-center text-yellow-400 font-bold bg-black/40 py-1 rounded whitespace-nowrap">
                                   {m.score1 != null ? `${m.score1} : ${m.score2}` : "- : -"}
                                 </span>
-                                <span className="w-2/5 text-right truncate text-xs md:text-[11px] font-medium">{getTeamName(m.team2_id)}</span>
+
+                                {/* 🔥 TEAM 2 IM SPIELPLAN (Ohne Rahmen und Icon) */}
+                                <div className="w-[40%] text-right truncate text-xs font-bold text-white/90">
+                                  {getTeamName(m.team2_id)}
+                                </div>
+
                               </div>
                             ))}
                           </div>
@@ -360,7 +407,11 @@ export default function TurnierTabelle() {
                       </div>
                     ) : (
                       <>
-                        <span className={`flex-1 text-center sm:text-left truncate text-base ${isHome ? 'font-bold text-yellow-400' : 'text-gray-300'}`}>{getTeamName(m.team1_id)} {isHome && "(Du)"}</span>
+                        {/* 🔥 TEAM 1 BADGE IM MODAL */}
+                        <div className={`flex items-center justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team1_id]?.level)}`}>
+                          <img src={getTierImage(teamMap[m.team1_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
+                          <span className="truncate tracking-tight">{getTeamName(m.team1_id)} {isHome && "(Du)"}</span>
+                        </div>
 
                         <div className="flex flex-col items-center justify-center min-w-[120px]">
                           {m.status === "confirmed" ? (
@@ -401,7 +452,13 @@ export default function TurnierTabelle() {
                             )
                           ) : null}
                         </div>
-                        <span className={`flex-1 text-center sm:text-right truncate text-base ${isAway ? 'font-bold text-yellow-400' : 'text-gray-300'}`}>{getTeamName(m.team2_id)} {isAway && "(Du)"}</span>
+
+                        {/* 🔥 TEAM 2 BADGE IM MODAL */}
+                        <div className={`flex items-center justify-end flex-row-reverse sm:flex-row sm:justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team2_id]?.level)}`}>
+                          <img src={getTierImage(teamMap[m.team2_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
+                          <span className="truncate tracking-tight">{getTeamName(m.team2_id)} {isAway && "(Du)"}</span>
+                        </div>
+                        
                       </>
                     )}
                   </div>

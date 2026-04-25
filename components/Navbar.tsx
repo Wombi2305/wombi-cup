@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation"; // 🔥 NEU importiert
+import { usePathname } from "next/navigation";
 import DiscordLogin from "@/components/DiscordLogin";
 import AccountMenu from "@/components/AccountMenu";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname(); // 🔥 Holt den aktuellen Pfad
+  const pathname = usePathname();
 
-  // 🔥 NEU: Schließt das Menü automatisch, sobald sich die URL ändert
+  // Schließt das Menü automatisch, sobald sich die URL ändert
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
@@ -49,8 +49,7 @@ export default function Navbar() {
       {/* MOBILE MENU */}
       {open && (
         <div className="md:hidden bg-black/95 backdrop-blur-xl border-t border-yellow-500/10 px-6 py-6 space-y-6 shadow-2xl h-screen overflow-y-auto pb-32">
-          {/* Die onClick-Handler bei den Links können jetzt sogar weggelassen werden, 
-              da der useEffect oben das Schließen übernimmt. Ich habe sie zur doppelten Sicherheit aber drin gelassen. */}
+          
           <Link href="/anmelden" className="block text-lg font-medium text-white/90 hover:text-yellow-400" onClick={() => setOpen(false)}>
             Turniere
           </Link>
@@ -62,6 +61,14 @@ export default function Navbar() {
           </Link>
           <Link href="/ranking" className="block text-lg font-medium text-white/90 hover:text-yellow-400" onClick={() => setOpen(false)}>
             Ranking
+          </Link>
+
+          {/* 🔥 GEÄNDERT: Wrapper-div entfernt, damit das space-y-6 vom Eltern-Container perfekt greift */}
+          <Link href="/profil" className="block text-lg font-medium text-white/90 hover:text-yellow-400" onClick={() => setOpen(false)}>
+            Profil
+          </Link>
+          <Link href="/meine-teams" className="block text-lg font-medium text-white/90 hover:text-yellow-400" onClick={() => setOpen(false)}>
+            Meine Teams
           </Link>
 
           <div className="pt-6 border-t border-white/10 flex flex-col gap-4">

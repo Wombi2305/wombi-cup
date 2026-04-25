@@ -3,23 +3,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-// 🔥 XP-KURVE HELPER
-const getRequiredXpForLevel = (level: number) => {
-  if (level < 11) return Math.floor(50 + (level - 1) * (70 / 9)); 
-  if (level < 21) return Math.floor(130 + (level - 11) * (70 / 9));
-  if (level < 36) return Math.floor(210 + (level - 21) * (110 / 14));
-  if (level < 46) return Math.floor(330 + (level - 36) * (120 / 9));
-  if (level === 46) return 500;
-  if (level === 47) return 550;
-  if (level === 48) return 600;
-  if (level === 49) return 650;
-  return 700;
-};
-
-// 🔥 LEVEL-BERECHNUNG
-const calculateTeamLevel = (team: any) => {
+// 🔥 DEUTLICH VEREINFACHT: Wir holen uns nur noch das Bild und die XP für die Anzeige
+const getTeamStatsUI = (team: any) => {
   if (!team) return { level: 1, totalXp: 0, tierImage: "/Bronze.png" };
 
+  // Wir rechnen nur kurz die Gesamt-XP für die kleine Anzeige unter dem Teamnamen zusammen
   const totalXp = 
     (team.participations || 0) * 50 +
     (team.wins_top5 || 0) * 50 +
@@ -27,19 +15,8 @@ const calculateTeamLevel = (team: any) => {
     (team.wins_top1 || 0) * 100 +
     (team.total_goals_scored || 0) * 10;
 
-  let level = 1;
-  let remainingXp = totalXp;
-  let requiredLevelXp = 50;
-
-  while (true) {
-    requiredLevelXp = getRequiredXpForLevel(level);
-    if (remainingXp >= requiredLevelXp && level < 50) {
-      remainingXp -= requiredLevelXp;
-      level++;
-    } else {
-      break;
-    }
-  }
+  // 🔥 WIR NUTZEN DAS LEVEL DIREKT AUS DEINER DATENBANK!
+  const level = team.level || 1;
 
   let tierImage = "/Bronze.png";
   if (level >= 45) tierImage = "/Prisma.png";
@@ -64,11 +41,11 @@ export default function RankingPage() {
   const fetchRanking = async () => {
     setLoading(true);
     
-    // Sortierung nach Siegen, wie gewollt
     const { data, error } = await supabase
       .from("teams")
       .select("*")
       .gt("participations", 0) // Nur Teams, die mindestens 1 Spiel haben
+      .eq("is_deleted", false) // Nur Teams, die nicht gelöscht/deaktiviert sind
       .order("wins_top1", { ascending: false })
       .order("wins_top3", { ascending: false })
       .order("wins_top5", { ascending: false });
@@ -76,7 +53,7 @@ export default function RankingPage() {
     if (data) {
       const rankedTeams = data.map(team => ({
         ...team,
-        stats: calculateTeamLevel(team)
+        stats: getTeamStatsUI(team) // Nutzt jetzt unsere neue, schlanke Funktion
       }));
 
       setRanking(rankedTeams);
@@ -93,10 +70,10 @@ export default function RankingPage() {
   }
 
   return (
-    <main className="min-h-[calc(100vh-100px)] px-4 sm:px-6 pt-24 md:pt-28 pb-12 w-full max-w-6xl mx-auto text-white">
+    <main className="min-h-[calc(100vh-100px)] px-4 sm:px-6 pt-16 md:pt-20 pb-12 w-full max-w-6xl mx-auto text-white">
       <div className="flex flex-col items-center mb-12 text-center">
-        <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2 uppercase italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">
-          Global Ranking
+        <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2 uppercase italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 pr-2">
+          Ranking Season 0
         </h1>
         <p className="text-gray-400 max-w-md text-sm md:text-base">
           Wer wird das Topteam der 1. Saison des WombiCups?
@@ -110,10 +87,10 @@ export default function RankingPage() {
               <tr className="bg-white/5 text-[10px] md:text-xs uppercase tracking-[0.2em] text-gray-400 font-black whitespace-nowrap border-b border-white/10">
                 <th className="px-4 py-4 md:p-5 text-center">Rank</th>
                 <th className="px-4 py-4 md:p-5">Team</th>
-                <th className="px-4 py-4 md:p-5 text-center text-yellow-500">Level</th>
-                {/* 🔥 "Spiele" Header entfernt */}
-                <th className="px-4 py-4 md:p-5 text-center text-yellow-500">🏆 1st</th>
-                <th className="px-4 py-4 md:p-5 text-center text-gray-300">🥈 Top 3</th>
+                <th className="px-4 py-4 md:p-5 text-center text-gray-300">Teilnahmen</th>
+                <th className="px-4 py-4 md:p-5 text-center text-yellow-500">🏆 Cup Siege</th>
+                <th className="px-4 py-4 md:p-5 text-center text-gray-300">🥈 Top 4</th>
+                <th className="px-4 py-4 md:p-5 text-center text-orange-400">🏅 Top 8</th>
                 <th className="px-4 py-4 md:p-5 text-center">Tore</th>
                 <th className="px-4 py-4 md:p-5 text-center">Diff</th>
               </tr>
@@ -154,21 +131,24 @@ export default function RankingPage() {
                       </div>
                     </td>
 
-                    {/* LEVEL */}
-                    <td className="px-4 py-3 md:p-5 text-center font-black text-lg md:text-xl text-yellow-500 drop-shadow-md">
-                      {team.stats.level}
+                    {/* TEILNAHMEN */}
+                    <td className="px-4 py-3 md:p-5 text-center font-bold text-gray-300">
+                      {team.participations || 0}
                     </td>
 
-                    {/* 🔥 "Spiele" td entfernt */}
-
-                    {/* WINS (TOP 1) */}
+                    {/* CUP SIEGE */}
                     <td className="px-4 py-3 md:p-5 text-center font-black text-base text-yellow-500">
                       {team.wins_top1 || 0}
                     </td>
 
-                    {/* TOP 3 */}
+                    {/* TOP 4 */}
                     <td className="px-4 py-3 md:p-5 text-center font-bold text-gray-300">
                       {team.wins_top3 || 0}
+                    </td>
+
+                    {/* TOP 8 */}
+                    <td className="px-4 py-3 md:p-5 text-center font-bold text-orange-400">
+                      {team.wins_top5 || 0}
                     </td>
 
                     {/* TORE */}
@@ -186,8 +166,7 @@ export default function RankingPage() {
               
               {ranking.length === 0 && (
                 <tr>
-                  {/* 🔥 colSpan auf 7 reduziert (vorher 8) */}
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500 font-medium">
+                  <td colSpan={8} className="px-4 py-8 text-center text-gray-500 font-medium">
                     Noch keine Daten vorhanden. Die Saison hat gerade erst begonnen!
                   </td>
                 </tr>
