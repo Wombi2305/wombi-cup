@@ -31,7 +31,7 @@ const getTierColors = (level: number) => {
   return "bg-amber-700/20 border-amber-700/40 text-amber-50"; // Bronze
 };
 
-export default function TurnierTabelle() {
+export default function ArchivTabelle() {
   const router = useRouter();
 
   // --- STATES ---
@@ -162,12 +162,8 @@ export default function TurnierTabelle() {
   const fetchTournaments = async () => {
     setLoadingData(true);
     
-    // 🔥 GEÄNDERT: Wir suchen NUR nach aktiven Turnieren (archived = false) UND bereits ausgelosten (draw_finished = true)
-    const { data } = await supabase
-      .from("tournaments")
-      .select("*")
-      .eq("archived", false)
-      .eq("draw_finished", true);
+    // 🔥 Sucht NUR nach archivierten Turnieren
+    const { data } = await supabase.from("tournaments").select("*").eq("archived", true);
     
     if (!data || data.length === 0) { 
       setTournaments([]);
@@ -180,9 +176,14 @@ export default function TurnierTabelle() {
       return; 
     }
     
-    // 🔥 Sortier-Logik für draw_finished entfernt, da wir ohnehin nur noch ausgeloste haben
-    setTournaments(data);
-    setSelectedTournament(data[0].id);
+    const sorted = [...data].sort((a, b) => {
+      if (a.draw_finished && !b.draw_finished) return -1;
+      if (!a.draw_finished && b.draw_finished) return 1;
+      return 0;
+    });
+    setTournaments(sorted);
+    const withGroups = sorted.find(t => t.draw_finished === true);
+    setSelectedTournament(withGroups ? withGroups.id : sorted[0].id);
     setLoadingData(false);
   };
 
@@ -248,14 +249,19 @@ export default function TurnierTabelle() {
   return (
     <main className="px-4 md:px-6 pt-6 pb-12 text-white font-sans w-full max-w-7xl mx-auto">
       <div className="flex gap-3 mb-4">
-        <button className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm cursor-default">🟢 Aktuell</button>
-        <Link href="/archiv" className="border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5">📦 Archiv</Link>
+        {/* 🔥 Link verweist auf /tabelle */}
+        <Link href="/tabelle" className="border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5">
+          🟢 Aktuell
+        </Link>
+        <button className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm cursor-default">
+          📦 Archiv
+        </button>
       </div>
 
       {loadingData ? (
         <div className="text-white/60 text-center mt-20">⏳ Lade...</div>
       ) : tournaments.length === 0 ? (
-        <div className="text-white/60 text-center mt-20">Es gibt derzeit keine laufenden Turniere.</div>
+        <div className="text-white/60 text-center mt-20">Es gibt derzeit keine archivierten Turniere.</div>
       ) : (
         <>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -355,6 +361,7 @@ export default function TurnierTabelle() {
                               {games.map((m: any) => (
                                 <div key={m.id} className="flex justify-between items-center text-xs bg-white/5 hover:bg-white/10 transition px-2 py-2 rounded-lg border border-white/5">
                                   
+                                  {/* 🔥 TEAM 1 IM SPIELPLAN (Ohne Rahmen und Icon) */}
                                   <div className="w-[40%] text-left truncate text-xs font-bold text-white/90">
                                     {getTeamName(m.team1_id)}
                                   </div>
@@ -363,6 +370,7 @@ export default function TurnierTabelle() {
                                     {m.score1 != null ? `${m.score1} : ${m.score2}` : "- : -"}
                                   </span>
 
+                                  {/* 🔥 TEAM 2 IM SPIELPLAN (Ohne Rahmen und Icon) */}
                                   <div className="w-[40%] text-right truncate text-xs font-bold text-white/90">
                                     {getTeamName(m.team2_id)}
                                   </div>
@@ -405,6 +413,7 @@ export default function TurnierTabelle() {
                 return (
                   <div key={m.id} className="flex flex-col sm:flex-row justify-between items-center bg-[#1e1e1e] p-5 rounded-2xl gap-4">
                     
+                    {/* 🔥 ADMIN KONFLIKT MELDUNG */}
                     {m.status === "rejected" ? (
                       <div className="flex flex-col items-center justify-center w-full text-center gap-2 py-2">
                         <div className="text-red-500 font-bold text-lg md:text-xl tracking-wider uppercase flex items-center gap-2"><span>🚨</span> Konflikt: Ergebnis abgelehnt</div>
@@ -415,6 +424,7 @@ export default function TurnierTabelle() {
                       </div>
                     ) : (
                       <>
+                        {/* 🔥 TEAM 1 BADGE IM MODAL */}
                         <div className={`flex items-center justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team1_id]?.level)}`}>
                           <img src={getTierImage(teamMap[m.team1_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
                           <span className="truncate tracking-tight">{getTeamName(m.team1_id)} {isHome && "(Du)"}</span>
@@ -460,6 +470,7 @@ export default function TurnierTabelle() {
                           ) : null}
                         </div>
 
+                        {/* 🔥 TEAM 2 BADGE IM MODAL */}
                         <div className={`flex items-center justify-end flex-row-reverse sm:flex-row sm:justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team2_id]?.level)}`}>
                           <img src={getTierImage(teamMap[m.team2_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
                           <span className="truncate tracking-tight">{getTeamName(m.team2_id)} {isAway && "(Du)"}</span>
