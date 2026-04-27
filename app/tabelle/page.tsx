@@ -95,7 +95,8 @@ export default function TurnierTabelle() {
   const calculateTable = (groupTeams: any[], groupMatches: any[]) => {
     const table: any = {};
     groupTeams.forEach((team) => {
-      table[team.id] = { id: team.id, name: team.teamname, level: team.level, sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 };
+      // 🔥 HIER GEÄNDERT: logo_url hinzugefügt, damit wir das Bild später nutzen können
+      table[team.id] = { id: team.id, name: team.teamname, level: team.level, logo_url: team.logo_url, sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 };
     });
 
     groupMatches.forEach((m) => {
@@ -162,7 +163,6 @@ export default function TurnierTabelle() {
   const fetchTournaments = async () => {
     setLoadingData(true);
     
-    // 🔥 GEÄNDERT: Wir suchen NUR nach aktiven Turnieren (archived = false) UND bereits ausgelosten (draw_finished = true)
     const { data } = await supabase
       .from("tournaments")
       .select("*")
@@ -180,7 +180,6 @@ export default function TurnierTabelle() {
       return; 
     }
     
-    // 🔥 Sortier-Logik für draw_finished entfernt, da wir ohnehin nur noch ausgeloste haben
     setTournaments(data);
     setSelectedTournament(data[0].id);
     setLoadingData(false);
@@ -321,11 +320,15 @@ export default function TurnierTabelle() {
                               <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-lg md:text-xl" : "text-yellow-400 text-base md:text-xl"}`}>{i + 1}</span>
                               <span className="text-white/90 font-bold text-sm">{team.pkt}</span>
                               
-                              {/* 🔥 TEAM BADGE IN TABELLE */}
+                              {/* 🔥 TEAM BADGE IN TABELLE ANGEPASST 🔥 */}
                               <div className="col-span-5 flex items-center justify-start pr-2">
                                   <div className={`flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold w-full ${getTierColors(team.level)}`}>
-                                    <img src={getTierImage(team.level)} alt="Rank" className="w-8 h-8 object-contain shrink-0" />
-                                    <span className="whitespace-nowrap">{team.name}</span>
+                                    {team.logo_url ? (
+                                      <img src={team.logo_url} alt="Team Logo" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" />
+                                    ) : (
+                                      <img src={getTierImage(team.level)} alt="Rank" className="w-8 h-8 object-contain shrink-0" />
+                                    )}
+                                    <span className="whitespace-nowrap truncate">{team.name}</span>
                                   </div>
                               </div>
                               
@@ -415,8 +418,13 @@ export default function TurnierTabelle() {
                       </div>
                     ) : (
                       <>
+                        {/* 🔥 TEAM 1 (LINKS) IM MODAL ANGEPASST 🔥 */}
                         <div className={`flex items-center justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team1_id]?.level)}`}>
-                          <img src={getTierImage(teamMap[m.team1_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
+                          {teamMap[m.team1_id]?.logo_url ? (
+                            <img src={teamMap[m.team1_id].logo_url} className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20 bg-black/40" alt="" />
+                          ) : (
+                            <img src={getTierImage(teamMap[m.team1_id]?.level)} className="w-6 h-6 object-contain shrink-0" alt="" />
+                          )}
                           <span className="truncate tracking-tight">{getTeamName(m.team1_id)} {isHome && "(Du)"}</span>
                         </div>
 
@@ -460,8 +468,13 @@ export default function TurnierTabelle() {
                           ) : null}
                         </div>
 
+                        {/* 🔥 TEAM 2 (RECHTS) IM MODAL ANGEPASST 🔥 */}
                         <div className={`flex items-center justify-end flex-row-reverse sm:flex-row sm:justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team2_id]?.level)}`}>
-                          <img src={getTierImage(teamMap[m.team2_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
+                          {teamMap[m.team2_id]?.logo_url ? (
+                            <img src={teamMap[m.team2_id].logo_url} className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20 bg-black/40" alt="" />
+                          ) : (
+                            <img src={getTierImage(teamMap[m.team2_id]?.level)} className="w-6 h-6 object-contain shrink-0" alt="" />
+                          )}
                           <span className="truncate tracking-tight">{getTeamName(m.team2_id)} {isAway && "(Du)"}</span>
                         </div>
                         
