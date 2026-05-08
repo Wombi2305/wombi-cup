@@ -140,15 +140,33 @@ export default function Admin() {
     }
   };
 
-  // 🔥 ANGEPASST: Aktualisiert nun die tournament_registrations Tabelle
+  // 🔥 FINAL: Sauberer Status-Update-Code (ohne Trigger-Check, da wir den Trigger löschen)
   const updateTeamStatus = async (registrationId: number, status: "approved" | "waiting") => {
-    await supabase.from("tournament_registrations").update({ status }).eq("id", registrationId);
+    const { error } = await supabase
+      .from("tournament_registrations")
+      .update({ status })
+      .eq("id", registrationId);
+      
+    if (error) {
+      alert("Fehler beim Ändern des Status: " + error.message);
+      return;
+    }
+    
     fetchData();
   };
 
-  // 🔥 ANGEPASST: 2-Schritt-Erstellung für das Dummy-Team
+  // 🔥 ANGEPASST: 2-Schritt-Erstellung für das Dummy-Team MIT Max-Team Prüfung
   const addFreilos = async (tournamentId: number) => {
-    // 1. Dummy Team anlegen (ohne tournament_id)
+    // 1. Das Turnier-Limit prüfen
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    const approvedCount = teams.filter(x => x.tournament_id === tournamentId && x.status === "approved").length;
+    
+    // Entscheiden: Ist noch Platz oder muss es auf die Warteliste?
+    const targetStatus = (tournament?.max_teams && approvedCount >= tournament.max_teams) 
+      ? "waiting" 
+      : "approved";
+
+    // 2. Dummy Team anlegen (ohne tournament_id)
     const { data: newTeam, error: teamError } = await supabase.from("teams").insert([{
       teamname: "--- FREILOS ---"
     }]).select().single();
@@ -158,11 +176,11 @@ export default function Admin() {
       return;
     }
 
-    // 2. Registrierung für das Turnier erstellen
+    // 3. Registrierung für das Turnier erstellen (mit dynamischem Status)
     const { error: regError } = await supabase.from("tournament_registrations").insert([{
       team_id: newTeam.id,
       tournament_id: tournamentId,
-      status: "approved"
+      status: targetStatus
     }]);
 
     if (regError) {
