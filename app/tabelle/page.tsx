@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Fragment, useMemo } from "react";
+import { useEffect, useState, Fragment, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -18,17 +18,75 @@ const getTierImage = (level: number) => {
   return "/Bronze.png";
 };
 
-// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen
-const getTierColors = (level: number) => {
+// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen (als Objekt für die Cosmetics)
+const getTierStyles = (level: number) => {
   const l = level || 1;
-  if (l >= 45) return "bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-50"; // Prisma
-  if (l >= 40) return "bg-purple-500/20 border-purple-500/40 text-purple-50"; // Amethyst
-  if (l >= 35) return "bg-blue-500/20 border-blue-500/40 text-blue-50"; // Sapphire
-  if (l >= 30) return "bg-emerald-500/20 border-emerald-500/40 text-emerald-50"; // Emerald
-  if (l >= 25) return "bg-red-500/20 border-red-500/40 text-red-50"; // Ruby
-  if (l >= 20) return "bg-yellow-500/20 border-yellow-500/40 text-yellow-50"; // Gold
-  if (l >= 10) return "bg-slate-400/20 border-slate-400/40 text-slate-50"; // Silber
-  return "bg-amber-700/20 border-amber-700/40 text-amber-50"; // Bronze
+  if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
+  if (l >= 40) return { bg: "bg-purple-500/20", border: "border-purple-500/40", text: "text-purple-50" };
+  if (l >= 35) return { bg: "bg-blue-500/20", border: "border-blue-500/40", text: "text-blue-50" };
+  if (l >= 30) return { bg: "bg-emerald-500/20", border: "border-emerald-500/40", text: "text-emerald-50" };
+  if (l >= 25) return { bg: "bg-red-500/20", border: "border-red-500/40", text: "text-red-50" };
+  if (l >= 20) return { bg: "bg-yellow-500/20", border: "border-yellow-500/40", text: "text-yellow-50" };
+  if (l >= 10) return { bg: "bg-slate-400/20", border: "border-slate-400/40", text: "text-slate-50" };
+  return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
+};
+
+// 🔥 NEU: Die universelle TeamCard inkl. Cosmetics
+const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, isDu?: boolean, reverseOnMobile?: boolean }) => {
+  if (!team) return <div className="flex-1" />;
+
+  const tierStyles = getTierStyles(team.level);
+  
+  // Überprüfen der Cosmetics
+  const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : tierStyles.border;
+  const banner = team.equipped_banner;
+  const bg = banner && banner !== 'default' 
+    ? 'bg-black/60' 
+    : team.equipped_background === '1' 
+      ? 'bg-gradient-to-br from-yellow-900/40 to-black' 
+      : tierStyles.bg;
+  const textColor = team.equipped_color === '1' 
+    ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' 
+    : tierStyles.text;
+
+  return (
+    <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
+      {banner && banner !== 'default' && (
+        <img 
+          src={`/rewards/banner_${banner}.png`} 
+          alt="" 
+          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none"
+          onError={(e) => e.currentTarget.style.display = 'none'} 
+        />
+      )}
+      <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
+        {team.logo_url ? (
+          <img src={team.logo_url} loading="lazy" decoding="async" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" alt="Logo" />
+        ) : (
+          <img src={getTierImage(team.level)} loading="lazy" decoding="async" className="w-8 h-8 object-contain shrink-0" alt="Rank" />
+        )}
+        <span
+        className={`
+          min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none
+          tracking-tight transition-colors duration-500
+          text-[clamp(10px,1vw,16px)]
+          ${textColor}
+        `}
+        style={{
+         fontSize: "clamp(10px, 1vw, 16px)",
+       }}
+      >
+        {team.name || team.teamname}
+
+       {isDu && (
+          <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
+           (Du)
+          </span>
+        )}
+      </span>
+      </div>
+    </div>
+  );
 };
 
 export default function TurnierTabelle() {
@@ -51,6 +109,8 @@ export default function TurnierTabelle() {
   const [activeGroup, setActiveGroup] = useState<string>("ALL");
   const [tournamentStats, setTournamentStats] = useState<any>({});
   const [scores, setScores] = useState<any>({});
+
+  const fetchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentTournamentData = tournaments.find((t) => t.id === selectedTournament) || {};
   const tournamentStyle = {
@@ -95,8 +155,18 @@ export default function TurnierTabelle() {
   const calculateTable = (groupTeams: any[], groupMatches: any[]) => {
     const table: any = {};
     groupTeams.forEach((team) => {
-      // 🔥 HIER GEÄNDERT: logo_url hinzugefügt, damit wir das Bild später nutzen können
-      table[team.id] = { id: team.id, name: team.teamname, level: team.level, logo_url: team.logo_url, sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 };
+      // 🔥 NEU: Cosmetics aus der DB in die Tabelle durchschleifen
+      table[team.id] = { 
+        id: team.id, 
+        name: team.teamname, 
+        level: team.level, 
+        logo_url: team.logo_url, 
+        equipped_banner: team.equipped_banner,
+        equipped_color: team.equipped_color,
+        equipped_border: team.equipped_border,
+        equipped_background: team.equipped_background,
+        sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 
+      };
     });
 
     groupMatches.forEach((m) => {
@@ -153,11 +223,22 @@ export default function TurnierTabelle() {
 
   useEffect(() => {
     if (!selectedTournament) return;
+    
     fetchData();
+    
     const channel = supabase.channel("realtime-tabelle")
-      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => fetchData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => {
+        if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+        fetchTimeout.current = setTimeout(() => {
+          fetchData(true);
+        }, 2000);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      
+    return () => { 
+      supabase.removeChannel(channel); 
+      if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+    };
   }, [selectedTournament, user]);
 
   const fetchTournaments = async () => {
@@ -233,7 +314,41 @@ export default function TurnierTabelle() {
   };
 
   const handleConfirm = async (matchId: number) => {
+    // 1. Erstmal das Match normal bestätigen
     await supabase.from("matches").update({ status: "confirmed", confirmed_by: user.id }).eq("id", matchId);
+
+    // 2. 🔥 AUTOMATISCHER XP-BOOST CHECK 🔥
+    const match = matches.find((m) => m.id === matchId);
+    if (match && match.score1 !== null && match.score2 !== null) {
+      const team1Wins = match.score1 > match.score2;
+      const team2Wins = match.score2 > match.score1;
+      
+      // Wer hat gewonnen?
+      const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
+      
+      if (winningTeamId) {
+        // Hat der Sieger einen aktiven Boost?
+        const { data: winnerData } = await supabase
+          .from('teams')
+          .select('active_xp_boosts, bonus_xp')
+          .eq('id', winningTeamId)
+          .single();
+          
+        if (winnerData && winnerData.active_xp_boosts > 0) {
+          // Bonus berechnen: 50 XP Pauschal + 10 XP pro geschossenem Tor
+          const goalsScored = team1Wins ? match.score1 : match.score2;
+          const extraXp = 50 + (goalsScored * 10); 
+
+          // Boost abziehen und XP gutschreiben
+          await supabase.from('teams').update({
+            active_xp_boosts: winnerData.active_xp_boosts - 1,
+            bonus_xp: (winnerData.bonus_xp || 0) + extraXp
+          }).eq('id', winningTeamId);
+        }
+      }
+    }
+
+    // 3. UI neu laden
     fetchData(true);
   };
 
@@ -288,8 +403,8 @@ export default function TurnierTabelle() {
               return (
                 <Fragment key={groupName}>
                   
-                  {/* 🔥 TABELLE */}
-                  <div className="border border-yellow-500/30 rounded-xl p-4 shadow-xl backdrop-blur-sm bg-black/40 min-h-[400px] overflow-hidden">
+                  {/* 🔥 TABELLE - NEUER HINTERGRUND OHNE BLUR */}
+                  <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] min-h-[400px] overflow-hidden">
                     <div className="mb-3 border-b border-yellow-500/30 pb-2">
                       <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Gruppe {groupName}</span>
                     </div>
@@ -320,16 +435,9 @@ export default function TurnierTabelle() {
                               <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-lg md:text-xl" : "text-yellow-400 text-base md:text-xl"}`}>{i + 1}</span>
                               <span className="text-white/90 font-bold text-sm">{team.pkt}</span>
                               
-                              {/* 🔥 TEAM BADGE IN TABELLE ANGEPASST 🔥 */}
                               <div className="col-span-5 flex items-center justify-start pr-2">
-                                  <div className={`flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold w-full ${getTierColors(team.level)}`}>
-                                    {team.logo_url ? (
-                                      <img src={team.logo_url} alt="Team Logo" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" />
-                                    ) : (
-                                      <img src={getTierImage(team.level)} alt="Rank" className="w-8 h-8 object-contain shrink-0" />
-                                    )}
-                                    <span className="whitespace-nowrap truncate">{team.name}</span>
-                                  </div>
+                                {/* 🔥 HIER WIRD DIE TEAM-CARD GELADEN */}
+                                <TeamCard team={team} />
                               </div>
                               
                               <span>{team.sp}</span>
@@ -344,9 +452,9 @@ export default function TurnierTabelle() {
                     </div>
                   </div>
 
-                  {/* 🔥 SPIELPLAN */}
+                  {/* 🔥 SPIELPLAN - NEUER HINTERGRUND OHNE BLUR */}
                   {activeGroup !== "ALL" && (
-                    <div className="border border-yellow-500/30 rounded-xl p-4 shadow-xl backdrop-blur-sm bg-black/40 flex flex-col min-h-[400px]">
+                    <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex flex-col min-h-[400px]">
                       <div className="mb-4 border-b border-yellow-500/30 pb-2">
                         <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Spielplan Gruppe {groupName}</span>
                       </div>
@@ -418,15 +526,8 @@ export default function TurnierTabelle() {
                       </div>
                     ) : (
                       <>
-                        {/* 🔥 TEAM 1 (LINKS) IM MODAL ANGEPASST 🔥 */}
-                        <div className={`flex items-center justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team1_id]?.level)}`}>
-                          {teamMap[m.team1_id]?.logo_url ? (
-                            <img src={teamMap[m.team1_id].logo_url} className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20 bg-black/40" alt="" />
-                          ) : (
-                            <img src={getTierImage(teamMap[m.team1_id]?.level)} className="w-6 h-6 object-contain shrink-0" alt="" />
-                          )}
-                          <span className="truncate tracking-tight">{getTeamName(m.team1_id)} {isHome && "(Du)"}</span>
-                        </div>
+                        {/* 🔥 TEAMCARD HEIM 🔥 */}
+                        <TeamCard team={teamMap[m.team1_id]} isDu={isHome} />
 
                         <div className="flex flex-col items-center justify-center min-w-[120px]">
                           {m.status === "confirmed" ? (
@@ -468,15 +569,8 @@ export default function TurnierTabelle() {
                           ) : null}
                         </div>
 
-                        {/* 🔥 TEAM 2 (RECHTS) IM MODAL ANGEPASST 🔥 */}
-                        <div className={`flex items-center justify-end flex-row-reverse sm:flex-row sm:justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team2_id]?.level)}`}>
-                          {teamMap[m.team2_id]?.logo_url ? (
-                            <img src={teamMap[m.team2_id].logo_url} className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20 bg-black/40" alt="" />
-                          ) : (
-                            <img src={getTierImage(teamMap[m.team2_id]?.level)} className="w-6 h-6 object-contain shrink-0" alt="" />
-                          )}
-                          <span className="truncate tracking-tight">{getTeamName(m.team2_id)} {isAway && "(Du)"}</span>
-                        </div>
+                        {/* 🔥 TEAMCARD GAST 🔥 */}
+                        <TeamCard team={teamMap[m.team2_id]} isDu={isAway} reverseOnMobile />
                         
                       </>
                     )}

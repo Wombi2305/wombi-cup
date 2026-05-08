@@ -20,17 +20,66 @@ const getTierImage = (level: number) => {
   return "/Bronze.png";
 };
 
-// 🔥 NEUER HELPER: Holt die passende Farbe für den Hintergrund & Rahmen
-const getTierColors = (level: number) => {
+// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen (als Objekt für die Cosmetics)
+const getTierStyles = (level: number) => {
   const l = level || 1;
-  if (l >= 45) return "bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-50"; // Prisma
-  if (l >= 40) return "bg-purple-500/20 border-purple-500/40 text-purple-50"; // Amethyst
-  if (l >= 35) return "bg-blue-500/20 border-blue-500/40 text-blue-50"; // Sapphire
-  if (l >= 30) return "bg-emerald-500/20 border-emerald-500/40 text-emerald-50"; // Emerald
-  if (l >= 25) return "bg-red-500/20 border-red-500/40 text-red-50"; // Ruby
-  if (l >= 20) return "bg-yellow-500/20 border-yellow-500/40 text-yellow-50"; // Gold
-  if (l >= 10) return "bg-slate-400/20 border-slate-400/40 text-slate-50"; // Silber
-  return "bg-amber-700/20 border-amber-700/40 text-amber-50"; // Bronze
+  if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
+  if (l >= 40) return { bg: "bg-purple-500/20", border: "border-purple-500/40", text: "text-purple-50" };
+  if (l >= 35) return { bg: "bg-blue-500/20", border: "border-blue-500/40", text: "text-blue-50" };
+  if (l >= 30) return { bg: "bg-emerald-500/20", border: "border-emerald-500/40", text: "text-emerald-50" };
+  if (l >= 25) return { bg: "bg-red-500/20", border: "border-red-500/40", text: "text-red-50" };
+  if (l >= 20) return { bg: "bg-yellow-500/20", border: "border-yellow-500/40", text: "text-yellow-50" };
+  if (l >= 10) return { bg: "bg-slate-400/20", border: "border-slate-400/40", text: "text-slate-50" };
+  return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
+};
+
+// 🔥 DIE UNIVERSELLE TEAM-CARD 🔥
+const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, isWinner = false }: { team?: any, isDu?: boolean, reverseOnMobile?: boolean, isTBD?: boolean, isWinner?: boolean }) => {
+  if (!team || isTBD) {
+    return (
+      <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} border border-white/5 bg-white/5 rounded-md px-3 py-1.5 text-sm font-bold flex-1 basis-0 min-w-0 text-gray-500 italic`}>
+        <span className="truncate">TBD</span>
+      </div>
+    );
+  }
+
+  const tierStyles = getTierStyles(team.level);
+  
+  const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : tierStyles.border;
+  const banner = team.equipped_banner;
+  const bg = banner && banner !== 'default' 
+    ? 'bg-black/60' 
+    : team.equipped_background === '1' 
+      ? 'bg-gradient-to-br from-yellow-900/40 to-black' 
+      : tierStyles.bg;
+  const textColor = team.equipped_color === '1' 
+    ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' 
+    : tierStyles.text;
+
+  return (
+    <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm font-bold flex-1 basis-0 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
+      {banner && banner !== 'default' && (
+        <img 
+          src={`/rewards/banner_${banner}.png`} 
+          alt="" 
+          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none"
+          onError={(e) => e.currentTarget.style.display = 'none'} 
+        />
+      )}
+      <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
+        {team.logo_url ? (
+          <img src={team.logo_url} loading="lazy" decoding="async" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" alt="Logo" />
+        ) : (
+          <img src={getTierImage(team.level)} loading="lazy" decoding="async" className="w-8 h-8 object-contain shrink-0" alt="Rank" />
+        )}
+        <span className={`whitespace-nowrap truncate tracking-tight transition-colors duration-500 ${textColor}`}>
+          {team.name || team.teamname} 
+          {isDu && <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">(Du)</span>}
+          {isWinner && " 👑"}
+        </span>
+      </div>
+    </div>
+  );
 };
 
 export default function DrawPage() {
@@ -167,13 +216,19 @@ export default function DrawPage() {
   const fetchTeams = async () => {
     if (!selectedTournament) return;
     
+    // 🔥 NEU: Wir laden jetzt ALLE kosmetischen Daten mit runter!
     const { data } = await supabase
       .from("tournament_registrations")
       .select(`
         teams (
           id,
           teamname,
-          level
+          level,
+          logo_url,
+          equipped_banner,
+          equipped_color,
+          equipped_border,
+          equipped_background
         )
       `)
       .eq("tournament_id", selectedTournament)
@@ -380,18 +435,59 @@ export default function DrawPage() {
               />
             </div>
 
+            {/* 🔥 BIG REVEAL CARD 🔥 */}
             {drawIndex < shuffled.length && (
               <div className="min-h-[6rem] md:min-h-[8rem] flex items-center justify-center mb-10 w-full px-2">
                 {revealedTeam ? (
-                  <div className="flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] px-6 md:px-10 py-4 rounded-2xl bg-yellow-500 text-black font-bold text-3xl md:text-4xl shadow-[0_0_40px_rgba(255,200,0,0.4)] animate-fadeIn">
-                    <img src={getTierImage(revealedTeam.level)} alt="Rank" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-xl shrink-0" />
-                    <span className="whitespace-nowrap tracking-tight">{revealedTeam.teamname}</span>
-                  </div>
+                  (() => {
+                    const t = revealedTeam;
+                    const tStyles = getTierStyles(t.level);
+                    const bdr = t.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.6)]' : `border-2 ${tStyles.border} shadow-[0_0_20px_rgba(255,255,255,0.1)]`;
+                    const bnr = t.equipped_banner;
+                    const bbg = bnr && bnr !== 'default' ? 'bg-black/60' : t.equipped_background === '1' ? 'bg-gradient-to-br from-yellow-900/40 to-black' : tStyles.bg;
+                    const txt = t.equipped_color === '1' ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' : tStyles.text;
+
+                    return (
+                      <div className={`relative overflow-hidden flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] px-6 md:px-10 py-4 rounded-2xl font-bold text-3xl md:text-4xl animate-fadeIn ${bdr} ${bbg}`}>
+                         {bnr && bnr !== 'default' && (
+                            <img src={`/rewards/banner_${bnr}.png`} alt="" className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" onError={(e) => e.currentTarget.style.display = 'none'} />
+                         )}
+                         <div className="relative z-10 flex items-center justify-center gap-4 md:gap-6 w-full">
+                            {t.logo_url ? (
+                              <img src={t.logo_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-xl" alt="Logo" />
+                            ) : (
+                              <img src={getTierImage(t.level)} className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-xl shrink-0" alt="Rank" />
+                            )}
+                            <span className={`whitespace-nowrap tracking-tight truncate ${txt}`}>{t.teamname}</span>
+                         </div>
+                      </div>
+                    );
+                  })()
                 ) : displayTeam ? (
-                  <div className="flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] bg-yellow-500/10 border-2 border-yellow-400 px-6 md:px-10 py-4 rounded-2xl text-3xl md:text-4xl font-bold text-yellow-400 animate-pulse">
-                    <img src={getTierImage(displayTeam.level)} alt="Rank" className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg opacity-90 shrink-0" />
-                    <span className="whitespace-nowrap tracking-tight">{displayTeam.teamname}</span>
-                  </div>
+                  (() => {
+                    const t = displayTeam;
+                    const tStyles = getTierStyles(t.level);
+                    const bdr = t.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : `border-2 ${tStyles.border}`;
+                    const bnr = t.equipped_banner;
+                    const bbg = bnr && bnr !== 'default' ? 'bg-black/60' : t.equipped_background === '1' ? 'bg-gradient-to-br from-yellow-900/40 to-black' : tStyles.bg;
+                    const txt = t.equipped_color === '1' ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' : tStyles.text;
+
+                    return (
+                      <div className={`relative overflow-hidden flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] px-6 md:px-10 py-4 rounded-2xl font-bold text-3xl md:text-4xl animate-pulse opacity-90 ${bdr} ${bbg}`}>
+                         {bnr && bnr !== 'default' && (
+                            <img src={`/rewards/banner_${bnr}.png`} alt="" className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" onError={(e) => e.currentTarget.style.display = 'none'} />
+                         )}
+                         <div className="relative z-10 flex items-center justify-center gap-4 md:gap-6 w-full">
+                            {t.logo_url ? (
+                              <img src={t.logo_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-lg" alt="Logo" />
+                            ) : (
+                              <img src={getTierImage(t.level)} className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg shrink-0" alt="Rank" />
+                            )}
+                            <span className={`whitespace-nowrap tracking-tight truncate ${txt}`}>{t.teamname}</span>
+                         </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div className="h-[6rem] md:h-[8rem]"></div>
                 )}
@@ -406,9 +502,8 @@ export default function DrawPage() {
                     {groups[group]?.length === 0 && <div className="text-gray-600 text-sm text-center mt-4">WARTEN...</div>}
                     
                     {groups[group]?.map((team: any, index: number) => (
-                      <div key={index} className={`h-[44px] shrink-0 flex items-center justify-start border rounded-lg px-3 gap-3 text-sm font-bold animate-fadeIn ${getTierColors(team.level)}`}>
-                        <img src={getTierImage(team.level)} alt="Rank" className="w-7 h-7 md:w-8 md:h-8 object-contain drop-shadow-md shrink-0" />
-                        <span className="whitespace-nowrap tracking-tight">{team.teamname}</span>
+                      <div key={index} className="animate-fadeIn flex w-full">
+                        <TeamCard team={team} />
                       </div>
                     ))}
                   </div>

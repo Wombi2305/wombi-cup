@@ -16,17 +16,82 @@ const getTierImage = (level: number) => {
   return "/Bronze.png";
 };
 
-// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen
-const getTierColors = (level: number) => {
+// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen (als Objekt für die Cosmetics)
+const getTierStyles = (level: number) => {
   const l = level || 1;
-  if (l >= 45) return "bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-50"; // Prisma
-  if (l >= 40) return "bg-purple-500/20 border-purple-500/40 text-purple-50"; // Amethyst
-  if (l >= 35) return "bg-blue-500/20 border-blue-500/40 text-blue-50"; // Sapphire
-  if (l >= 30) return "bg-emerald-500/20 border-emerald-500/40 text-emerald-50"; // Emerald
-  if (l >= 25) return "bg-red-500/20 border-red-500/40 text-red-50"; // Ruby
-  if (l >= 20) return "bg-yellow-500/20 border-yellow-500/40 text-yellow-50"; // Gold
-  if (l >= 10) return "bg-slate-400/20 border-slate-400/40 text-slate-50"; // Silber
-  return "bg-amber-700/20 border-amber-700/40 text-amber-50"; // Bronze
+  if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
+  if (l >= 40) return { bg: "bg-purple-500/20", border: "border-purple-500/40", text: "text-purple-50" };
+  if (l >= 35) return { bg: "bg-blue-500/20", border: "border-blue-500/40", text: "text-blue-50" };
+  if (l >= 30) return { bg: "bg-emerald-500/20", border: "border-emerald-500/40", text: "text-emerald-50" };
+  if (l >= 25) return { bg: "bg-red-500/20", border: "border-red-500/40", text: "text-red-50" };
+  if (l >= 20) return { bg: "bg-yellow-500/20", border: "border-yellow-500/40", text: "text-yellow-50" };
+  if (l >= 10) return { bg: "bg-slate-400/20", border: "border-slate-400/40", text: "text-slate-50" };
+  return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
+};
+
+// 🔥 DIE UNIVERSELLE TEAM-CARD 🔥
+const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, isWinner = false }: { team?: any, isDu?: boolean, reverseOnMobile?: boolean, isTBD?: boolean, isWinner?: boolean }) => {
+  // Wenn es noch kein Team gibt (TBD)
+  if (!team || isTBD) {
+    return (
+      <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} border border-white/5 bg-white/5 rounded-md px-3 py-1.5 text-sm font-bold flex-1 basis-0 min-w-0 text-gray-500 italic`}>
+        <span className="truncate">TBD</span>
+      </div>
+    );
+  }
+
+  const tierStyles = getTierStyles(team.level);
+  
+  // Überprüfen der Cosmetics
+  const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : tierStyles.border;
+  const banner = team.equipped_banner;
+  const bg = banner && banner !== 'default' 
+    ? 'bg-black/60' 
+    : team.equipped_background === '1' 
+      ? 'bg-gradient-to-br from-yellow-900/40 to-black' 
+      : tierStyles.bg;
+  const textColor = team.equipped_color === '1' 
+    ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' 
+    : tierStyles.text;
+
+  return (
+    <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 basis-0 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
+      {banner && banner !== 'default' && (
+        <img 
+          src={`/rewards/banner_${banner}.png`} 
+          alt="" 
+          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none"
+          onError={(e) => e.currentTarget.style.display = 'none'} 
+        />
+      )}
+      <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
+        {team.logo_url ? (
+          <img src={team.logo_url} loading="lazy" decoding="async" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" alt="Logo" />
+        ) : (
+          <img src={getTierImage(team.level)} loading="lazy" decoding="async" className="w-8 h-8 object-contain shrink-0" alt="Rank" />
+        )}
+      
+        <span className={`
+          min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none
+          tracking-tight transition-colors duration-500
+          text-[clamp(10px,1vw,16px)]
+          ${textColor}
+        `}
+        style={{
+          fontSize: "clamp(10px, 1vw, 16px)",
+        }}
+      >
+        {team.name || team.teamname}
+
+        {isDu && (
+          <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
+            (Du)
+          </span>
+        )}
+      </span>
+      </div>
+    </div>
+  );
 };
 
 interface KoPhaseProps {
@@ -107,8 +172,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     return sortedMatches[sortedMatches.length - 1];
   }, [myKoMatches]);
 
-  const getTeamName = (id: number) => teamMap[id]?.teamname || "Team";
-
   // ===============================
   // SCORE HANDLERS
   // ===============================
@@ -152,8 +215,40 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   };
 
   const handleConfirm = async (matchId: number) => {
+    // 1. Erstmal das Match normal bestätigen
     setLocalMatches((prev) => prev.map((m) => m.id === matchId ? { ...m, status: "confirmed", confirmed_by: user?.id } : m));
     await supabase.from("matches").update({ status: "confirmed", confirmed_by: user?.id }).eq("id", matchId);
+
+    // 2. 🔥 AUTOMATISCHER XP-BOOST CHECK 🔥
+    const match = localMatches.find((m) => m.id === matchId);
+    if (!match || match.score1 === null || match.score2 === null) return;
+
+    const team1Wins = match.score1 > match.score2;
+    const team2Wins = match.score2 > match.score1;
+    
+    // Wer hat gewonnen?
+    const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
+    
+    if (winningTeamId) {
+      // Hat der Sieger einen aktiven Boost?
+      const { data: winnerData } = await supabase
+        .from('teams')
+        .select('active_xp_boosts, bonus_xp')
+        .eq('id', winningTeamId)
+        .single();
+        
+      if (winnerData && winnerData.active_xp_boosts > 0) {
+        // Bonus berechnen: z.B. 50 XP Pauschal + 10 XP pro geschossenem Tor
+        const goalsScored = team1Wins ? match.score1 : match.score2;
+        const extraXp = 50 + (goalsScored * 10); 
+
+        // Boost abziehen und XP gutschreiben
+        await supabase.from('teams').update({
+          active_xp_boosts: winnerData.active_xp_boosts - 1,
+          bonus_xp: (winnerData.bonus_xp || 0) + extraXp
+        }).eq('id', winningTeamId);
+      }
+    }
   };
 
   const handleReject = async (matchId: number) => {
@@ -169,7 +264,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
         <div className="flex gap-2 mb-6 w-full">
           <button 
             onClick={() => setIsModalOpen(true)} 
-            className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md hover:scale-105 transition-transform"
+            className="bg-yellow-500 text-black px-4 py-2 rounded-xl font-bold text-sm shadow-md hover:scale-105 transition-transform"
           >
             {getRoundName(activeUserMatch.ko_round)} eintragen
           </button>
@@ -196,7 +291,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
           ))}
         </div>
 
-        <div className="flex flex-col gap-4 mt-2">
+        <div className="flex flex-col gap-3 mt-2">
           {koMatches
             .filter((m) => m.ko_round === currentMobileRound)
             .sort((a, b) => a.id - b.id)
@@ -212,38 +307,16 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                   
                   {/* TEAM 1 */}
                   <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team1Wins ? 'opacity-40' : ''}`}>
-                    {team1 ? (
-                      <div className={`flex items-center justify-start border rounded-lg px-2.5 py-1.5 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(team1.level)}`}>
-                        {team1.logo_url ? (
-                          <img src={team1.logo_url} alt="Logo" className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20" />
-                        ) : (
-                          <img src={getTierImage(team1.level)} alt="Rank" className="w-6 h-6 object-contain shrink-0" />
-                        )}
-                        <span className="truncate tracking-tight">{team1.teamname} {team1Wins && currentMobileRound === 2 && "👑"}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-start border border-white/5 bg-white/5 rounded-lg px-2.5 py-1.5 text-sm font-bold flex-1 text-gray-500 italic">TBD</div>
-                    )}
-                    <div className="w-12 text-center font-black text-xl shrink-0">
+                    <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && currentMobileRound === 2} />
+                    <div className="w-10 text-center font-black text-lg shrink-0">
                       <span className={isConfirmed ? (team1Wins ? "text-green-400" : "text-gray-500") : "text-gray-400"}>{m.score1 ?? "-"}</span>
                     </div>
                   </div>
 
                   {/* TEAM 2 */}
                   <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team2Wins ? 'opacity-40' : ''}`}>
-                    {team2 ? (
-                      <div className={`flex items-center justify-start border rounded-lg px-2.5 py-1.5 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(team2.level)}`}>
-                        {team2.logo_url ? (
-                          <img src={team2.logo_url} alt="Logo" className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20" />
-                        ) : (
-                          <img src={getTierImage(team2.level)} alt="Rank" className="w-6 h-6 object-contain shrink-0" />
-                        )}
-                        <span className="truncate tracking-tight">{team2.teamname} {team2Wins && currentMobileRound === 2 && "👑"}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-start border border-white/5 bg-white/5 rounded-lg px-2.5 py-1.5 text-sm font-bold flex-1 text-gray-500 italic">TBD</div>
-                    )}
-                    <div className="w-12 text-center font-black text-xl shrink-0">
+                    <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && currentMobileRound === 2} />
+                    <div className="w-10 text-center font-black text-lg shrink-0">
                       <span className={isConfirmed ? (team2Wins ? "text-green-400" : "text-gray-500") : "text-gray-400"}>{m.score2 ?? "-"}</span>
                     </div>
                   </div>
@@ -264,7 +337,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
               .sort((a, b) => a.id - b.id);
 
             return (
-              <div key={round} className="flex flex-col w-[320px] shrink-0">
+              <div key={round} className="flex flex-col w-[300px] shrink-0">
                 <div className="text-center pb-2 border-b border-yellow-500/30 mb-2 mx-6">
                   <h3 className="text-yellow-400 font-bold uppercase text-sm tracking-widest">{getRoundName(round)}</h3>
                 </div>
@@ -278,7 +351,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                     const team2Wins = isConfirmed && m.score1 !== null && m.score2 !== null && m.score2 > m.score1;
 
                     return (
-                      <div key={m.id} className="flex-1 flex flex-col justify-center relative px-6 py-4">
+                      <div key={m.id} className="flex-1 flex flex-col justify-center relative px-6 py-3">
                         {colIndex > 0 && <div className="absolute left-0 top-1/2 w-6 h-[2px] bg-white/10 -translate-y-1/2" />}
                         {colIndex < expectedRounds.length - 1 && (
                           <>
@@ -295,18 +368,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                           
                           {/* TEAM 1 */}
                           <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team1Wins ? 'opacity-40' : ''}`}>
-                            {team1 ? (
-                              <div className={`flex items-center justify-start border rounded-lg px-2.5 py-1.5 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(team1.level)}`}>
-                                {team1.logo_url ? (
-                                  <img src={team1.logo_url} alt="Logo" className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20 shadow-sm" />
-                                ) : (
-                                  <img src={getTierImage(team1.level)} alt="Rank" className="w-6 h-6 object-contain shrink-0" />
-                                )}
-                                <span className="truncate tracking-tight">{team1.teamname} {team1Wins && round === 2 && "👑"}</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-start border border-white/5 bg-white/5 rounded-lg px-2.5 py-1.5 text-sm font-bold flex-1 text-gray-500 italic">TBD</div>
-                            )}
+                            <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && round === 2} />
                             <div className="w-10 text-center font-black text-lg shrink-0">
                               <span className={isConfirmed ? (team1Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score1 ?? "-"}</span>
                             </div>
@@ -314,18 +376,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
                           {/* TEAM 2 */}
                           <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team2Wins ? 'opacity-40' : ''}`}>
-                            {team2 ? (
-                              <div className={`flex items-center justify-start border rounded-lg px-2.5 py-1.5 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(team2.level)}`}>
-                                {team2.logo_url ? (
-                                  <img src={team2.logo_url} alt="Logo" className="w-6 h-6 rounded-full object-cover shrink-0 border border-white/20 shadow-sm" />
-                                ) : (
-                                  <img src={getTierImage(team2.level)} alt="Rank" className="w-6 h-6 object-contain shrink-0" />
-                                )}
-                                <span className="truncate tracking-tight">{team2.teamname} {team2Wins && round === 2 && "👑"}</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-start border border-white/5 bg-white/5 rounded-lg px-2.5 py-1.5 text-sm font-bold flex-1 text-gray-500 italic">TBD</div>
-                            )}
+                            <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && round === 2} />
                             <div className="w-10 text-center font-black text-lg shrink-0">
                               <span className={isConfirmed ? (team2Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score2 ?? "-"}</span>
                             </div>
@@ -348,8 +399,8 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#111] p-6 rounded-3xl w-full max-w-2xl border border-white/5 shadow-2xl max-h-[90vh] overflow-y-auto">
             
-            <div className="flex justify-between items-center mb-6 text-white">
-              <h2 className="font-bold text-xl">{getRoundName(activeUserMatch.ko_round)} verwalten</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-white font-bold text-xl">{getRoundName(activeUserMatch.ko_round)} verwalten</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition">✕</button>
             </div>
 
@@ -358,63 +409,58 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                 const myTeamId = teams.find((t) => t.user_id === user?.id)?.id;
                 const isHome = m.team1_id === myTeamId;
                 const isAway = m.team2_id === myTeamId;
+                const team1 = teamMap[m.team1_id];
+                const team2 = teamMap[m.team2_id];
                 const s1 = scores[m.id]?.s1 ?? (m.score1 !== null ? String(m.score1) : "");
                 const s2 = scores[m.id]?.s2 ?? (m.score2 !== null ? String(m.score2) : "");
 
                 return (
-                  <div key={m.id} className="flex flex-col sm:flex-row justify-between items-center bg-[#1e1e1e] p-5 rounded-2xl gap-4 border border-white/5">
+                  <div key={m.id} className="flex flex-col sm:flex-row justify-between items-center bg-[#1e1e1e] p-5 rounded-2xl gap-4">
                     
                     {m.status === "rejected" ? (
                       <div className="flex flex-col items-center justify-center w-full text-center gap-2 py-2">
                         <div className="text-red-500 font-bold text-lg uppercase flex items-center gap-2"><span>🚨</span> Konflikt: Ergebnis abgelehnt</div>
-                        <div className="text-xs text-gray-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20 mt-2 max-w-lg">Bitte öffnet ein Ticket im Discord zur Klärung.</div>
+                        <div className="text-xs text-gray-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20 mt-1 max-w-lg">Bitte öffnet ein Ticket im Discord zur Klärung.</div>
                       </div>
                     ) : (
                       <>
                         {/* TEAM 1 IM MODAL */}
-                        <div className={`flex items-center justify-start border rounded-lg px-3 py-2 gap-3 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team1_id]?.level)}`}>
-                          {teamMap[m.team1_id]?.logo_url ? (
-                            <img src={teamMap[m.team1_id].logo_url} className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20" alt="" />
-                          ) : (
-                            <img src={getTierImage(teamMap[m.team1_id]?.level)} className="w-8 h-8 object-contain shrink-0" alt="" />
-                          )}
-                          <span className={`truncate ${isHome ? 'text-yellow-400 underline decoration-yellow-400/30' : 'text-gray-100'}`}>{getTeamName(m.team1_id)} {isHome && "(Du)"}</span>
-                        </div>
+                        <TeamCard team={team1} isTBD={!team1} isDu={isHome} />
 
-                        <div className="flex flex-col items-center justify-center min-w-[140px]">
+                        <div className="flex flex-col items-center justify-center min-w-[100px] md:min-w-[120px]">
                           {m.status === "confirmed" ? (
                             <div className="text-center">
-                              <div className="text-green-500 font-black text-3xl tracking-widest">{m.score1} : {m.score2}</div>
-                              <div className="text-[10px] text-green-500 mt-1 uppercase font-bold flex items-center justify-center gap-1">✔ BESTÄTIGT</div>
+                              <div className="text-green-500 font-black text-2xl tracking-widest">{m.score1} : {m.score2}</div>
+                              <div className="text-[9px] text-green-500 mt-0.5 uppercase font-bold flex items-center justify-center gap-1">✔ BESTÄTIGT</div>
                             </div>
                           ) : isHome ? (
                             m.status == null ? (
-                              <div className="flex flex-col items-center gap-3 w-full">
+                              <div className="flex flex-col items-center gap-2 w-full">
                                 <div className="flex items-center gap-2">
-                                  <input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
+                                  <input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-10 h-10 bg-[#0a0a0a] border border-white/10 text-white text-lg text-center rounded-lg font-bold focus:border-blue-500 focus:outline-none transition" />
                                   <span className="font-bold text-gray-500">:</span>
-                                  <input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
+                                  <input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-10 h-10 bg-[#0a0a0a] border border-white/10 text-white text-lg text-center rounded-lg font-bold focus:border-blue-500 focus:outline-none transition" />
                                 </div>
-                                <button onClick={() => handleReport(m.id, m)} className="w-full text-sm bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-white font-bold transition shadow-lg shadow-blue-900/20">Melden</button>
+                                <button onClick={() => handleReport(m.id, m)} className="w-full text-xs bg-blue-600 hover:bg-blue-500 py-1.5 rounded-lg text-white font-bold transition shadow-md shadow-blue-900/20">Melden</button>
                               </div>
                             ) : (
                               <div className="text-center">
-                                <div className="font-black text-3xl text-white">{m.score1} : {m.score2}</div>
-                                <div className="text-[10px] text-yellow-500 mt-1 uppercase font-bold">Wartet auf Bestätigung</div>
+                                <div className="font-black text-2xl text-white">{m.score1} : {m.score2}</div>
+                                <div className="text-[9px] text-yellow-500 mt-0.5 uppercase font-bold">Wartet auf Bestätigung</div>
                               </div>
                             )
                           ) : isAway ? (
                             m.status == null ? (
                               <div className="text-center w-full">
-                                <div className="font-black text-3xl text-white/20 tracking-widest mb-1">- : -</div>
-                                <div className="text-[10px] text-yellow-500 uppercase font-bold tracking-widest">⏳ Warte auf Gegner</div>
+                                <div className="font-black text-2xl text-white/20 tracking-widest mb-1">- : -</div>
+                                <div className="text-[9px] text-yellow-500 uppercase font-bold tracking-widest">⏳ Warte auf Gegner</div>
                               </div>
                             ) : (
-                              <div className="flex flex-col items-center gap-2 w-full">
-                                <div className="font-black text-3xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div>
-                                <div className="flex gap-2 w-full mt-1">
-                                  <button onClick={() => handleConfirm(m.id)} className="flex-1 text-sm bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-white font-bold transition shadow-lg shadow-green-900/20">✔</button>
-                                  <button onClick={() => handleReject(m.id)} className="flex-1 text-sm bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-white font-bold transition shadow-lg shadow-red-900/20">✖</button>
+                              <div className="flex flex-col items-center gap-1.5 w-full">
+                                <div className="font-black text-2xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div>
+                                <div className="flex gap-1.5 w-full mt-0.5">
+                                  <button onClick={() => handleConfirm(m.id)} className="flex-1 text-xs bg-green-600 hover:bg-green-500 py-1.5 rounded-lg text-white font-bold transition shadow-md shadow-green-900/20">✔</button>
+                                  <button onClick={() => handleReject(m.id)} className="flex-1 text-xs bg-red-600 hover:bg-red-500 py-1.5 rounded-lg text-white font-bold transition shadow-md shadow-red-900/20">✖</button>
                                 </div>
                               </div>
                             )
@@ -422,14 +468,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                         </div>
 
                         {/* TEAM 2 IM MODAL */}
-                        <div className={`flex items-center justify-end flex-row-reverse sm:flex-row sm:justify-start border rounded-lg px-3 py-2 gap-3 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team2_id]?.level)}`}>
-                          {teamMap[m.team2_id]?.logo_url ? (
-                            <img src={teamMap[m.team2_id].logo_url} className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20" alt="" />
-                          ) : (
-                            <img src={getTierImage(teamMap[m.team2_id]?.level)} className="w-8 h-8 object-contain shrink-0" alt="" />
-                          )}
-                          <span className={`truncate ${isAway ? 'text-yellow-400 underline decoration-yellow-400/30' : 'text-gray-100'}`}>{getTeamName(m.team2_id)} {isAway && "(Du)"}</span>
-                        </div>
+                        <TeamCard team={team2} isTBD={!team2} isDu={isAway} reverseOnMobile />
                       </>
                     )}
                   </div>
