@@ -19,17 +19,24 @@ export default function DiscordLogin() {
 
       setUser(data.user);
       const discordId = data.user.user_metadata?.provider_id;
+      
+      // 🚀 NEU: Echten Discord-Namen aus den Metadaten auslesen
+      // Wir prüfen verschiedene Felder, da Discord je nach Account-Alter "global_name" oder "full_name" nutzt.
+      const discordName = data.user.user_metadata?.custom_claims?.global_name 
+                       || data.user.user_metadata?.full_name 
+                       || data.user.user_metadata?.name 
+                       || "Unbekannter Spieler";
 
       if (discordId) {
         localStorage.setItem("discord_user_id", discordId);
 
-        // 🚀 NEU: DATEN DIREKT VON DER API HOLEN
+        // DATEN DIREKT VON DER API HOLEN
         const res = await fetch(`/api/discord/member?userId=${discordId}`);
         const discordData = await res.json();
 
         console.log("DISCORD DATA:", discordData);
 
-        // 👉 NUR NOCH discordData.roles NUTZEN
+        // NUR NOCH discordData.roles NUTZEN
         const roles = discordData?.roles || [];
         console.log("ROLES FROM API:", roles);
 
@@ -37,10 +44,11 @@ export default function DiscordLogin() {
         const isAdmin = roles.some((r: any) => String(r) === "1492478735444873398");
         console.log("IS ADMIN:", isAdmin);
 
-        // Profile Upsert mit den API-Daten
+        // Profile Upsert mit den API-Daten UND dem neuen Discord-Namen
         const { error } = await supabase.from("profiles").upsert({
           id: data.user.id,
           discord_id: discordId,
+          discord_name: discordName, // 🔴 NEU: Speichert "Wombi2305" in die DB!
           is_admin: isAdmin,
         });
 
@@ -77,7 +85,7 @@ export default function DiscordLogin() {
     if (error) console.error("Login Error:", error);
   };
 
-  // 🔥 FIX: Solange die Daten noch geladen werden, zeige gar nichts an.
+  // FIX: Solange die Daten noch geladen werden, zeige gar nichts an.
   // Das verhindert den "Flash" des Login-Buttons.
   if (loading) return null;
 

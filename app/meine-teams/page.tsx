@@ -117,7 +117,6 @@ export default function MeineTeamsPage() {
   const [isCreating, setIsCreating] = useState(false);
   
   const [activeTab, setActiveTab] = useState<"overview" | "inventory" | "members">("overview");
-  
   const [cosmeticTab, setCosmeticTab] = useState<"banner" | "color" | "border">("banner");
   const [pendingCosmetics, setPendingCosmetics] = useState<{banner?: string, color?: string, border?: string, background?: string}>({});
   
@@ -152,16 +151,36 @@ export default function MeineTeamsPage() {
       }
       setUser(currentUser);
 
-      const [profileRes, teamsRes] = await Promise.all([
+      const [profileRes, ownedTeamsRes, memberTeamsRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", currentUser.id).single(),
-        supabase.from("teams").select("*").eq("user_id", currentUser.id).eq("is_deleted", false).order("created_at", { ascending: true })
+        supabase.from("teams").select("*").eq("user_id", currentUser.id).eq("is_deleted", false).order("created_at", { ascending: true }),
+        supabase.from("team_members").select("role, teams(*)").eq("user_id", currentUser.id)
       ]);
 
       if (profileRes.data) setProfile(profileRes.data);
 
-      if (teamsRes.data && teamsRes.data.length > 0) {
-        setAllTeams(teamsRes.data);
-        const activeTeam = teamsRes.data.find((t: any) => t.is_active) || teamsRes.data[0];
+      let mergedTeams: any[] = [];
+
+      // Eigene Teams (Immer Rolle 'captain')
+      if (ownedTeamsRes.data) {
+        ownedTeamsRes.data.forEach(t => {
+          mergedTeams.push({ ...t, myRole: 'captain' });
+        });
+      }
+
+      // Teams, in denen man Mitglied ist
+      if (memberTeamsRes.data) {
+        memberTeamsRes.data.forEach((mt: any) => {
+          const t = mt.teams;
+          if (t && !t.is_deleted && t.user_id !== currentUser.id) {
+            mergedTeams.push({ ...t, myRole: mt.role });
+          }
+        });
+      }
+
+      if (mergedTeams.length > 0) {
+        setAllTeams(mergedTeams);
+        const activeTeam = mergedTeams.find((t: any) => t.is_active) || mergedTeams[0];
         setIsCreating(false);
         setSelectedTeamId(activeTeam.id);
         setTeamname(activeTeam.teamname || "");
@@ -191,14 +210,13 @@ export default function MeineTeamsPage() {
           user_id: currentTeam.user_id,
           role: 'captain',
           profiles: { 
-            ea_ingame_name: currentTeam.captain, 
-            discord_id: "Team-Gründer" 
+            ea_ingame_name: currentTeam.captain
           }
         };
 
         const { data, error } = await supabase
           .from('team_members')
-          .select('id, user_id, role, profiles(id, discord_id, ea_ingame_name)')
+          .select('id, user_id, role, profiles(id, ea_ingame_name)')
           .eq('team_id', selectedTeamId);
 
         if (error) {
@@ -223,7 +241,6 @@ export default function MeineTeamsPage() {
     setTimeout(() => setMessage(null), 3000);
   }, []);
 
-  // 🔗 LINK KOPIEREN HELPER
   const handleCopyInviteLink = () => {
     if (!currentTeam) return;
     const inviteLink = `${window.location.origin}/invite/${currentTeam.id}`;
@@ -252,7 +269,6 @@ export default function MeineTeamsPage() {
     return profile?.role === "teamvm" || profile?.role === "orga";
   }, [profile]);
 
-  // Kosmetik Speichern...
   const handleSelectCosmetic = useCallback((category: "banner" | "color" | "border" | "background", itemValue: string) => {
     if (!selectedTeamId || isCreating || !currentTeam) return;
 
@@ -297,7 +313,6 @@ export default function MeineTeamsPage() {
     }
   };
 
-  // Warteliste / Tickets ...
   const openWaitlistModal = async () => {
     if (!selectedTeamId) return;
     setShowWaitlistModal(true);
@@ -510,8 +525,9 @@ export default function MeineTeamsPage() {
 
       if (error) throw error;
       
-      setAllTeams(prev => [...prev, newTeam]);
-      handleSelectTeam(newTeam, false);
+      const newTeamWithRole = { ...newTeam, myRole: 'captain' };
+      setAllTeams(prev => [...prev, newTeamWithRole]);
+      handleSelectTeam(newTeamWithRole, false);
       showMessage("✅ Team erfolgreich erstellt!");
     } catch (err: any) {
       showMessage("❌ Fehler beim Speichern");
@@ -615,8 +631,10 @@ export default function MeineTeamsPage() {
 
   if (!hasFormAccess) {
     return (
-      <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-10 pb-8 w-full max-w-5xl mx-auto text-white flex flex-col items-center justify-center">
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center text-center w-full max-w-2xl relative overflow-hidden transform-gpu">
+      <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-10 pb-8 w-full max-w-5xl mx-auto text-white flex flex-col items-center justify-center relative overflow-hidden">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-yellow-500/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
+
+        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center text-center w-full max-w-2xl relative z-10 transform-gpu">
           
           <div className="w-full mb-6 relative rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] border border-white/5">
             <img src="/TeamVM_InArbeit.png" alt="In Arbeit" className="w-full h-auto object-cover opacity-90" />
@@ -637,9 +655,12 @@ export default function MeineTeamsPage() {
 
   return (
     <>
-      <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-6 pb-12 w-full max-w-6xl mx-auto text-white flex flex-col">
+      <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-6 pb-12 w-full max-w-6xl mx-auto text-white flex flex-col relative overflow-hidden">
+        
+        <div className="absolute top-[20%] left-[20%] w-[500px] h-[500px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
+        <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-fuchsia-500/5 rounded-full blur-[150px] pointer-events-none z-0"></div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start relative z-10">
           
           {/* --- LINKE SPALTE: LOGO & VORSCHAU --- */}
           <div className="flex flex-col gap-4 lg:col-span-1">
@@ -665,7 +686,8 @@ export default function MeineTeamsPage() {
                   </div>
                 </div>
                 <div className="absolute inset-0 rounded-full border-2 border-yellow-500/50 scale-[1.05] pointer-events-none transition-transform duration-300 z-0"></div>
-                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                {/* LOGO UPLOAD NUR FÜR CAPTAINS & CO-CAPTAINS */}
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo || currentTeam?.myRole === 'spieler'} />
               </label>
               
               <div className="text-center w-full relative z-10">
@@ -673,7 +695,7 @@ export default function MeineTeamsPage() {
                   Team Logo {uploadingLogo && <div className="w-3 h-3 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>}
                 </h4>
                 <p className="text-[10px] text-gray-400 leading-relaxed max-w-[180px] mx-auto">
-                  Klicke, um ein Logo hochzuladen.
+                  {currentTeam?.myRole === 'spieler' ? "Nur Captains können das Logo ändern." : "Klicke, um ein Logo hochzuladen."}
                 </p>
               </div>
             </div>
@@ -716,23 +738,29 @@ export default function MeineTeamsPage() {
                     {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
                   </button>
                 ))}
+                {/* PLUS BUTTON: NUR FÜR NEUE TEAMS */}
                 <button onClick={() => handleSelectTeam(null, true)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${isCreating ? "bg-yellow-500/10 text-yellow-500" : "text-gray-500 hover:text-white hover:bg-white/5"}`}>
                   <span className="text-base leading-none">+</span> Neu
                 </button>
               </div>
 
-              {/* TABS NAVIGATION */}
+              {/* TABS NAVIGATION (ROLE BASED) */}
               {!isCreating && currentTeam && (
                 <div className="flex justify-center gap-4 sm:gap-6 border-b border-white/10 mb-5 px-2">
                   <button onClick={() => setActiveTab("overview")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "overview" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
                     Übersicht
                   </button>
-                  <button onClick={() => setActiveTab("inventory")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "inventory" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
-                    Inventar & Stil
-                  </button>
-                  <button onClick={() => setActiveTab("members")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "members" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
-                    Teammitglieder
-                  </button>
+                  
+                  {currentTeam.myRole !== 'spieler' && (
+                    <>
+                      <button onClick={() => setActiveTab("inventory")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "inventory" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                        Inventar & Stil
+                      </button>
+                      <button onClick={() => setActiveTab("members")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "members" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                        Teammitglieder
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -752,7 +780,10 @@ export default function MeineTeamsPage() {
                           <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span> Aktiv
                         </span>
                       ) : (
-                        <button onClick={handleMakeActive} disabled={saving} className="bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors">Als Aktiv setzen</button>
+                        // Nur Captain darf die globalen Team-Aktivitäts-Status ändern, um Konflikte zu vermeiden
+                        currentTeam.myRole === 'captain' && (
+                          <button onClick={handleMakeActive} disabled={saving} className="bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors">Als Aktiv setzen</button>
+                        )
                       )}
                     </div>
 
@@ -788,71 +819,75 @@ export default function MeineTeamsPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-1.5 sm:gap-3 text-center">
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
+                    <div className="grid grid-cols-5 gap-3 text-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.participations || 0}</span>
-                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold">Events</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Events</span>
                       </div>
-                      <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center relative overflow-hidden">
+                      <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-3 flex flex-col justify-center relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
                         <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
-                        <span className="text-[8px] sm:text-[10px] text-yellow-500/80 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold">Siege</span>
+                        <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold truncate">Siege</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top3 || 0}</span>
-                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold whitespace-nowrap">Top 4</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Top 4</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top5 || 0}</span>
-                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold whitespace-nowrap">Top 8</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Top 8</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.total_goals_scored || 0}</span>
-                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold">Tore</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Tore</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button onClick={() => setActiveTab("members")} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
-                      Teammitglieder verwalten
-                    </button>
-                    <button onClick={() => showMessage("🛒 Transfermarkt öffnet sich bald!")} className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
-                      Transfermarkt
-                    </button>
-                  </div>
-
-                  <div className="pt-2 border-t border-white/10">
-                    <form className="flex flex-col gap-4 mt-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">Teamname</label>
-                          <input type="text" value={teamname} disabled className="w-full bg-black/40 border border-white/5 shadow-inner rounded-xl p-3 text-sm text-gray-400 cursor-not-allowed" />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">Captain</label>
-                          <input type="text" value={captain} disabled className="w-full bg-black/40 border border-white/5 shadow-inner rounded-xl p-3 text-sm text-gray-400 cursor-not-allowed" />
-                        </div>
-                      </div>
-                      
-                      <button type="button" onClick={() => {setDeleteConfirmName(""); setShowDeleteModal(true);}} disabled={saving || uploadingLogo} className="w-full bg-black/20 hover:bg-red-500/10 text-red-500/80 hover:text-red-500 border border-red-500/10 hover:border-red-500/30 font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 flex justify-center items-center gap-2 text-sm">
-                        Team löschen
+                  {currentTeam.myRole !== 'spieler' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <button onClick={() => setActiveTab("members")} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
+                        Teammitglieder verwalten
                       </button>
-                    </form>
-                  </div>
+                      <button onClick={() => showMessage("🛒 Transfermarkt öffnet sich bald!")} className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
+                        Transfermarkt
+                      </button>
+                    </div>
+                  )}
+
+                  {currentTeam.myRole === 'captain' && (
+                    <div className="pt-2 border-t border-white/10">
+                      <form className="flex flex-col gap-4 mt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">Teamname</label>
+                            <input type="text" value={teamname} disabled className="w-full bg-black/40 border border-white/5 shadow-inner rounded-xl p-3 text-sm text-gray-400 cursor-not-allowed" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">Captain</label>
+                            <input type="text" value={captain} disabled className="w-full bg-black/40 border border-white/5 shadow-inner rounded-xl p-3 text-sm text-gray-400 cursor-not-allowed" />
+                          </div>
+                        </div>
+                        
+                        <button type="button" onClick={() => {setDeleteConfirmName(""); setShowDeleteModal(true);}} disabled={saving || uploadingLogo} className="w-full bg-black/20 hover:bg-red-500/10 text-red-500/80 hover:text-red-500 border border-red-500/10 hover:border-red-500/30 font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 flex justify-center items-center gap-2 text-sm">
+                          Team löschen
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* === INHALT: TEAMMITGLIEDER === */}
-              {!isCreating && currentTeam && activeTab === "members" && (
+              {!isCreating && currentTeam && activeTab === "members" && currentTeam.myRole !== 'spieler' && (
                 <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/[0.04] border border-white/5 rounded-2xl p-4 sm:p-5">
                     <div>
                       <h3 className="text-lg font-black text-white">Der Kader</h3>
                       <p className="text-xs text-gray-400 mt-1">Verwalte hier deine Spieler und Co-Captains.</p>
                     </div>
-                    {/* Nur der Team-Ersteller darf Leute einladen */}
-                    {currentTeam.user_id === user?.id && (
+                    {/* Captain UND Co-Captain dürfen einladen */}
+                    {(currentTeam.myRole === 'captain' || currentTeam.myRole === 'co-captain') && (
                       <button onClick={() => setShowAddMemberModal(true)} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
                         + Einladen
                       </button>
@@ -874,35 +909,43 @@ export default function MeineTeamsPage() {
                           </div>
 
                           <div className="flex items-center gap-3">
-                            {/* Profilbild Placeholder */}
                             <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shrink-0 overflow-hidden">
                               <span className="text-sm">👤</span>
                             </div>
-                            <div className="flex flex-col overflow-hidden">
-                              <span className="text-white font-bold text-sm truncate">
-                                {member.profiles?.ea_ingame_name || member.profiles?.discord_id || "Unbekannt"}
-                              </span>
-                              <span className="text-gray-500 text-xs truncate">
-                                {member.profiles?.discord_id && member.role !== 'captain' && !member.profiles.discord_id.match(/^[0-9]+$/) ? `@${member.profiles.discord_id}` : ""}
-                              </span>
+                            <div className="flex flex-col overflow-hidden pr-12">
+                              {member.profiles?.ea_ingame_name ? (
+                                <span className="text-white font-bold text-sm truncate">
+                                  {member.profiles.ea_ingame_name}
+                                </span>
+                              ) : (
+                                <span className="text-red-400/80 font-bold text-[10px] uppercase tracking-widest truncate mt-0.5">
+                                  EA ID fehlt
+                                </span>
+                              )}
                             </div>
                           </div>
 
                           {/* Action Area (Nur Captain darf ändern, und er darf sich selbst nicht ändern/löschen) */}
-                          {currentTeam.user_id === user?.id && member.role !== 'captain' && (
-                            <div className="mt-4 pt-3 border-t border-white/5 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300">
-                              <select 
-                                value={member.role} 
-                                onChange={(e) => handleRoleChange(member.id, e.target.value)}
-                                className="flex-1 bg-white/5 border border-white/10 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-yellow-500 cursor-pointer"
-                              >
-                                <option value="spieler">Spieler</option>
-                                <option value="co-captain">Co-Captain</option>
-                              </select>
+                          {currentTeam.myRole === 'captain' && member.role !== 'captain' && (
+                            <div className="mt-4 pt-3 border-t border-white/5 flex gap-2 transition-opacity duration-300 relative">
+                              
+                              <div className="relative flex-1">
+                                <select 
+                                  value={member.role} 
+                                  onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                                  className="w-full bg-black/50 hover:bg-black/80 border border-white/10 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg pl-3 pr-8 py-2.5 appearance-none focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 cursor-pointer transition-all"
+                                >
+                                  <option value="spieler">Spieler</option>
+                                  <option value="co-captain">Co-Captain</option>
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-gray-500">
+                                  ▼
+                                </div>
+                              </div>
                               
                               <button 
                                 onClick={() => handleKickMember(member.id, member.profiles?.ea_ingame_name || "Spieler")}
-                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-4 py-2 rounded-lg text-xs font-bold transition-colors shrink-0 flex items-center justify-center"
                                 title="Kicken"
                               >
                                 ✕
@@ -923,7 +966,7 @@ export default function MeineTeamsPage() {
               )}
 
               {/* === INHALT: INVENTAR & AUSSEHEN === */}
-              {!isCreating && currentTeam && activeTab === "inventory" && (
+              {!isCreating && currentTeam && activeTab === "inventory" && currentTeam.myRole !== 'spieler' && (
                 <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-2">
                   
                   <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1 mt-1">Gutscheine & Tickets</h4>
@@ -1128,7 +1171,7 @@ export default function MeineTeamsPage() {
         </div>}
       </main>
 
-      {/* --- ADD MEMBER MODAL (JETZT NUR NOCH ALS LINK-ANZEIGE) --- */}
+      {/* --- ADD MEMBER MODAL --- */}
       {showAddMemberModal && currentTeam && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
           <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 transform-gpu flex flex-col">
@@ -1165,7 +1208,7 @@ export default function MeineTeamsPage() {
         </div>
       )}
 
-      {/* ... andere Modals (Delete, Waitlist) bleiben gleich ... */}
+      {/* --- DELETE MODAL --- */}
       {showDeleteModal && currentTeam && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
           <div className="bg-[#0a0a0a] border border-red-500/20 rounded-3xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(220,38,38,0.15)] animate-in zoom-in-95 transform-gpu">
@@ -1180,6 +1223,7 @@ export default function MeineTeamsPage() {
         </div>
       )}
 
+      {/* --- WAITLIST MODAL --- */}
       {showWaitlistModal && currentTeam && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
           <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 w-full max-w-lg shadow-2xl animate-in zoom-in-95 transform-gpu">
