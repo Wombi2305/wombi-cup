@@ -265,10 +265,6 @@ export default function MeineTeamsPage() {
     }
   }, []);
 
-  const hasFormAccess = useMemo(() => {
-    return profile?.role === "teamvm" || profile?.role === "orga";
-  }, [profile]);
-
   const handleSelectCosmetic = useCallback((category: "banner" | "color" | "border" | "background", itemValue: string) => {
     if (!selectedTeamId || isCreating || !currentTeam) return;
 
@@ -629,30 +625,6 @@ export default function MeineTeamsPage() {
   if (loading) return <div className="min-h-[calc(100vh-100px)] flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
   if (!user) return <div className="min-h-[calc(100vh-100px)] flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
 
-  if (!hasFormAccess) {
-    return (
-      <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-10 pb-8 w-full max-w-5xl mx-auto text-white flex flex-col items-center justify-center relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-yellow-500/5 rounded-full blur-[120px] pointer-events-none z-0"></div>
-
-        <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center text-center w-full max-w-2xl relative z-10 transform-gpu">
-          
-          <div className="w-full mb-6 relative rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] border border-white/5">
-            <img src="/TeamVM_InArbeit.png" alt="In Arbeit" className="w-full h-auto object-cover opacity-90" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent opacity-90"></div>
-            
-            <div className="absolute bottom-4 left-0 w-full text-center z-10 px-4">
-              <h3 className="text-2xl md:text-3xl font-black text-white drop-shadow-md">🚧 Zugriff nur für TeamVM 🚧</h3>
-            </div>
-          </div>
-
-          <p className="text-gray-400 text-sm md:text-base leading-relaxed">
-            Aktuell können nur die <strong className="text-yellow-500">TeamVMs</strong> ihre Teams einsehen.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <>
       <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-6 pb-12 w-full max-w-6xl mx-auto text-white flex flex-col relative overflow-hidden">
@@ -726,15 +698,20 @@ export default function MeineTeamsPage() {
           <div className="lg:col-span-2 flex flex-col gap-4">
             <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex flex-col h-fit transform-gpu">
               
-              <div className="mb-4 flex flex-wrap gap-2 bg-black/40 p-1.5 rounded-2xl w-fit border border-white/5 mx-auto">
+              <div className="mb-6 flex flex-wrap justify-center gap-2 bg-black/40 p-1.5 rounded-2xl w-fit border border-white/5 mx-auto">
                 {allTeams.map((team) => (
-                  <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id ? "bg-white/10 text-yellow-400 shadow-sm" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                  <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-sm" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
                     {team.logo_url ? (
                       <img src={team.logo_url} alt="Logo" className="w-5 h-5 rounded-full object-cover border border-white/20" />
                     ) : (
                       <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
                     )}
                     {team.teamname}
+                    {team.myRole !== 'captain' && (
+                      <span className="ml-1 text-[9px] uppercase bg-white/10 px-1.5 py-0.5 rounded text-gray-300">
+                        {team.myRole === 'co-captain' ? 'Co-Capt' : 'Spieler'}
+                      </span>
+                    )}
                     {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
                   </button>
                 ))}
