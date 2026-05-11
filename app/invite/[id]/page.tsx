@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-// 🔥 XP-KURVE HELPER (Wird für die Teamkarte benötigt)
+// 🔥 XP-KURVE HELPER
 const getRequiredXpForLevel = (level: number) => {
   if (level < 11) return Math.floor(50 + (level - 1) * (70 / 9)); 
   if (level < 21) return Math.floor(130 + (level - 11) * (70 / 9));
@@ -17,7 +17,7 @@ const getRequiredXpForLevel = (level: number) => {
   return 700;
 };
 
-// 🔥 SCHLANKE LOGIK FÜR STATS (Rang-Bild und Level)
+// 🔥 SCHLANKE LOGIK FÜR STATS
 const getTeamStatsUI = (team: any) => {
   if (!team) return { level: 1, totalXp: 0, progress: 0, currentLevelXp: 0, requiredLevelXp: 50, tierImage: "/Bronze.png" };
 
@@ -44,7 +44,6 @@ const getTeamStatsUI = (team: any) => {
 
   return { level, totalXp, progress, currentLevelXp, requiredLevelXp, tierImage };
 };
-
 
 export default function InvitePage() {
   const params = useParams();
@@ -126,6 +125,24 @@ export default function InvitePage() {
     fetchInviteData();
   }, [params.id]);
 
+  // 🚀 DIREKTER LOGIN FÜR DIE EINLADUNGSSEITE
+  const handleDiscordLogin = async () => {
+    setJoining(true); // Verhindert Spam-Klicks
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          // Nach dem Login direkt wieder auf diese Einladungsseite umleiten
+          redirectTo: `${window.location.origin}/invite/${params.id}`,
+        },
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      setMessage(`❌ Login Fehler: ${error.message}`);
+      setJoining(false);
+    }
+  };
+
   const handleJoinTeam = async () => {
     if (!team || !user) return;
     setJoining(true);
@@ -179,15 +196,15 @@ export default function InvitePage() {
       {/* Background Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none z-0 opacity-50"></div>
 
-      {/* Hauptkarte - Jetzt mit Glassmorphism (bg-white/[0.03] & backdrop-blur-xl) */}
-      <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-8 md:p-10 shadow-2xl flex flex-col items-center text-center w-full max-w-lg relative z-10 transform-gpu animate-in fade-in slide-in-from-bottom-8 duration-500">
+      {/* Hauptkarte - Mit Glassmorphism aus dem Original-Code */}
+      <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 shadow-2xl flex flex-col items-center text-center w-full max-w-lg relative z-10 transform-gpu animate-in fade-in slide-in-from-bottom-8 duration-500">
         
         <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-6 z-10 relative">Teameinladung</h3>
         
         {/* ZENTRALER BEREICH */}
-        <div className="flex items-center justify-between gap-4 mb-5 w-full z-10 relative">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 mb-6 w-full z-10 relative mt-4">
           {/* Kleines Profilbild links */}
-          <div className="w-16 h-16 rounded-full border border-white/20 shadow-[0_0_15px_rgba(250,204,21,0.2)] bg-black/50 overflow-hidden flex items-center justify-center shrink-0 relative">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border border-white/20 shadow-[0_0_15px_rgba(250,204,21,0.2)] bg-black/50 overflow-hidden flex items-center justify-center shrink-0 relative">
             {team.logo_url ? (
               <img src={team.logo_url} alt="Team Logo" className="w-full h-full object-cover" />
             ) : (
@@ -198,15 +215,15 @@ export default function InvitePage() {
 
           {/* Großes Emblem in der Mitte */}
           <div className="flex-grow flex items-center justify-center relative px-2">
-            <img src={teamStats.tierImage} alt="Rang Emblem" className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_15px_rgba(250,204,21,0.3)] z-10 relative" />
+            <img src={teamStats.tierImage} alt="Rang Emblem" className="w-24 h-24 sm:w-32 sm:h-32 object-contain drop-shadow-[0_0_15px_rgba(250,204,21,0.3)] z-10 relative" />
             {/* Glimmer-Effekt */}
             <div className="absolute inset-0 bg-yellow-500/10 rounded-full blur-[20px] scale-125 z-0"></div>
           </div>
 
           {/* Level-Box rechts */}
-          <div className="bg-black/40 border border-white/10 p-3 rounded-2xl flex flex-col items-center justify-center shrink-0 w-24 shadow-inner">
-            <span className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1">Team Level</span>
-            <span className="text-4xl font-black text-white">{teamStats.level}</span>
+          <div className="bg-white/5 border border-white/10 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center shrink-0 w-20 sm:w-24 shadow-inner">
+            <span className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-1 text-center leading-tight">Team<br/>Level</span>
+            <span className="text-3xl sm:text-4xl font-black text-white">{teamStats.level}</span>
           </div>
         </div>
 
@@ -216,7 +233,7 @@ export default function InvitePage() {
           Du wurdest eingeladen, dem Team von <strong className="text-white">{team.captain}</strong> beizutreten.
         </p>
 
-        {/* Statistik-Raster */}
+        {/* Statistik-Raster (abgespeckt) */}
         <div className="grid grid-cols-2 gap-4 w-full mb-8 z-10 relative">
           {/* Dunkle Box für Events */}
           <div className="bg-black/40 border border-white/5 p-4 rounded-xl flex flex-col items-center relative overflow-hidden shadow-inner">
@@ -238,18 +255,24 @@ export default function InvitePage() {
         </div>
 
         {message && (
-          <div className="w-full bg-green-500/10 border border-green-500/30 text-green-400 px-4 py-3 rounded-xl text-sm font-bold mb-6 animate-in zoom-in-95 z-10 relative">
+          <div className={`w-full px-4 py-3 rounded-xl text-sm font-bold mb-6 animate-in zoom-in-95 z-10 relative ${message.includes('Fehler') ? 'bg-red-500/10 border border-red-500/30 text-red-400' : 'bg-green-500/10 border border-green-500/30 text-green-400'}`}>
             {message}
           </div>
         )}
 
         {/* AKTIONEN */}
         <div className="w-full space-y-4 z-10 relative">
+          
+          {/* 🔴 GEÄNDERT: Login mit Discord Funktion direkt eingebaut */}
           {status === "not_logged_in" && (
             <div className="bg-black/40 border border-white/10 p-5 rounded-2xl flex flex-col items-center shadow-inner">
               <p className="text-gray-300 text-sm font-medium mb-4">Du musst eingeloggt sein, um dem Team beizutreten.</p>
-              <button onClick={() => router.push('/login')} className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3.5 px-6 rounded-xl transition-colors">
-                Zum Login
+              <button 
+                onClick={handleDiscordLogin} 
+                disabled={joining}
+                className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold py-3.5 px-6 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {joining ? "Wird geladen..." : "Mit Discord einloggen"}
               </button>
             </div>
           )}
