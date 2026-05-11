@@ -115,7 +115,7 @@ export default function Navbar() {
 
       {/* MOBILE MENU */}
       {open && (
-        <div className="lg:hidden absolute top-full left-0 w-full bg-black/95 backdrop-blur-2xl border-t border-white/10 px-6 py-8 h-[calc(100vh-5rem)] overflow-y-auto flex flex-col gap-6 shadow-2xl">
+        <div className="lg:hidden absolute top-full left-0 w-full bg-black/95 backdrop-blur-2xl border-t border-white/10 px-6 py-8 h-[calc(100dvh-5rem)] overflow-y-auto flex flex-col gap-6 shadow-2xl pb-12">
           
           <div className="flex flex-col gap-2">
             {MAIN_LINKS.map((link) => {
@@ -160,7 +160,8 @@ export default function Navbar() {
             })}
           </div>
 
-          <div className="mt-auto pt-8 flex flex-col gap-4">
+          {/* FIX: mt-auto entfernt, pt-8 beibehalten. So klebt es unter den Links und rutscht nicht aus dem Bild */}
+          <div className="pt-8 flex flex-col gap-4">
             <AccountMenu />
             <DiscordLogin />
           </div>

@@ -116,7 +116,8 @@ export default function MeineTeamsPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<"overview" | "inventory">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "inventory" | "members">("overview");
+  
   const [cosmeticTab, setCosmeticTab] = useState<"banner" | "color" | "border">("banner");
   const [pendingCosmetics, setPendingCosmetics] = useState<{banner?: string, color?: string, border?: string, background?: string}>({});
   
@@ -134,6 +135,11 @@ export default function MeineTeamsPage() {
   const [teamname, setTeamname] = useState("");
   const [captain, setCaptain] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+
+  // Teammitglieder State
+  const [members, setMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -171,10 +177,59 @@ export default function MeineTeamsPage() {
     fetchData();
   }, []);
 
+  const currentTeam = useMemo(() => allTeams.find(t => t.id === selectedTeamId), [allTeams, selectedTeamId]);
+
+  // Lade Teammitglieder wenn der Tab "members" aktiv ist
+  useEffect(() => {
+    const fetchMembers = async () => {
+      if (!selectedTeamId || !currentTeam || activeTab !== "members") return;
+      setLoadingMembers(true);
+      
+      try {
+        const theCaptain = {
+          id: `captain-${currentTeam.id}`,
+          user_id: currentTeam.user_id,
+          role: 'captain',
+          profiles: { 
+            ea_ingame_name: currentTeam.captain, 
+            discord_id: "Team-Gründer" 
+          }
+        };
+
+        const { data, error } = await supabase
+          .from('team_members')
+          .select('id, user_id, role, profiles(id, discord_id, ea_ingame_name)')
+          .eq('team_id', selectedTeamId);
+
+        if (error) {
+          console.error("Fehler beim Laden der Mitglieder", error.message);
+          setMembers([theCaptain]);
+        } else {
+          const dbMembers = (data || []).filter(m => m.user_id !== currentTeam.user_id);
+          setMembers([theCaptain, ...dbMembers]);
+        }
+      } catch (err) {
+        console.error("Fehler beim Laden der Mitglieder", err);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    fetchMembers();
+  }, [activeTab, selectedTeamId, currentTeam]);
+
   const showMessage = useCallback((msg: string) => {
     setMessage(msg);
     setTimeout(() => setMessage(null), 3000);
   }, []);
+
+  // 🔗 LINK KOPIEREN HELPER
+  const handleCopyInviteLink = () => {
+    if (!currentTeam) return;
+    const inviteLink = `${window.location.origin}/invite/${currentTeam.id}`;
+    navigator.clipboard.writeText(inviteLink);
+    showMessage("✅ Einladungslink in die Zwischenablage kopiert!");
+  };
 
   const handleSelectTeam = useCallback((team: any, setCreating = false) => {
     setIsCreating(setCreating);
@@ -193,12 +248,11 @@ export default function MeineTeamsPage() {
     }
   }, []);
 
-  const currentTeam = useMemo(() => allTeams.find(t => t.id === selectedTeamId), [allTeams, selectedTeamId]);
-
   const hasFormAccess = useMemo(() => {
     return profile?.role === "teamvm" || profile?.role === "orga";
   }, [profile]);
 
+  // Kosmetik Speichern...
   const handleSelectCosmetic = useCallback((category: "banner" | "color" | "border" | "background", itemValue: string) => {
     if (!selectedTeamId || isCreating || !currentTeam) return;
 
@@ -243,6 +297,7 @@ export default function MeineTeamsPage() {
     }
   };
 
+  // Warteliste / Tickets ...
   const openWaitlistModal = async () => {
     if (!selectedTeamId) return;
     setShowWaitlistModal(true);
@@ -502,6 +557,30 @@ export default function MeineTeamsPage() {
     }
   };
 
+  // --- LOGIK FÜR TEAMMITGLIEDER ---
+  const handleRoleChange = async (memberId: string, newRole: string) => {
+    try {
+      const { error } = await supabase.from('team_members').update({ role: newRole }).eq('id', memberId);
+      if (error) throw error;
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+      showMessage("✅ Rolle aktualisiert.");
+    } catch (error) {
+      showMessage("❌ Fehler beim Ändern der Rolle.");
+    }
+  };
+
+  const handleKickMember = async (memberId: string, memberName: string) => {
+    if (!confirm(`Möchtest du ${memberName} wirklich aus dem Team werfen?`)) return;
+    try {
+      const { error } = await supabase.from('team_members').delete().eq('id', memberId);
+      if (error) throw error;
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+      showMessage(`🚪 ${memberName} wurde aus dem Team entfernt.`);
+    } catch (error) {
+      showMessage("❌ Fehler beim Entfernen.");
+    }
+  };
+
   const { teamStats, tierStyles, previewSettings } = useMemo(() => {
     const stats = getTeamStatsUI(currentTeam);
     const styles = getTierStyles(stats.level);
@@ -642,13 +721,17 @@ export default function MeineTeamsPage() {
                 </button>
               </div>
 
+              {/* TABS NAVIGATION */}
               {!isCreating && currentTeam && (
-                <div className="flex justify-center gap-6 border-b border-white/10 mb-5 px-4">
-                  <button onClick={() => setActiveTab("overview")} className={`pb-2 text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "overview" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                <div className="flex justify-center gap-4 sm:gap-6 border-b border-white/10 mb-5 px-2">
+                  <button onClick={() => setActiveTab("overview")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "overview" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
                     Übersicht
                   </button>
-                  <button onClick={() => setActiveTab("inventory")} className={`pb-2 text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "inventory" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                  <button onClick={() => setActiveTab("inventory")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "inventory" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
                     Inventar & Stil
+                  </button>
+                  <button onClick={() => setActiveTab("members")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "members" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                    Teammitglieder
                   </button>
                 </div>
               )}
@@ -705,34 +788,34 @@ export default function MeineTeamsPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-3 text-center">
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                    <div className="grid grid-cols-5 gap-1.5 sm:gap-3 text-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.participations || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Events</span>
+                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold">Events</span>
                       </div>
-                      <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-3 flex flex-col justify-center relative overflow-hidden">
+                      <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
                         <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold truncate">Siege</span>
+                        <span className="text-[8px] sm:text-[10px] text-yellow-500/80 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold">Siege</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top3 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Top 4</span>
+                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold whitespace-nowrap">Top 4</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top5 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Top 8</span>
+                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold whitespace-nowrap">Top 8</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                      <div className="bg-black/20 border border-white/5 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-center items-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.total_goals_scored || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Tore</span>
+                        <span className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wide sm:tracking-widest mt-1 font-semibold">Tore</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button onClick={() => showMessage("👥 Teammitglieder-Ansicht kommt bald!")} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
-                      Teammitglieder
+                    <button onClick={() => setActiveTab("members")} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
+                      Teammitglieder verwalten
                     </button>
                     <button onClick={() => showMessage("🛒 Transfermarkt öffnet sich bald!")} className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
                       Transfermarkt
@@ -757,6 +840,85 @@ export default function MeineTeamsPage() {
                       </button>
                     </form>
                   </div>
+                </div>
+              )}
+
+              {/* === INHALT: TEAMMITGLIEDER === */}
+              {!isCreating && currentTeam && activeTab === "members" && (
+                <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/[0.04] border border-white/5 rounded-2xl p-4 sm:p-5">
+                    <div>
+                      <h3 className="text-lg font-black text-white">Der Kader</h3>
+                      <p className="text-xs text-gray-400 mt-1">Verwalte hier deine Spieler und Co-Captains.</p>
+                    </div>
+                    {/* Nur der Team-Ersteller darf Leute einladen */}
+                    {currentTeam.user_id === user?.id && (
+                      <button onClick={() => setShowAddMemberModal(true)} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
+                        + Einladen
+                      </button>
+                    )}
+                  </div>
+
+                  {loadingMembers ? (
+                    <div className="py-10 flex justify-center"><div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                      {members.map((member) => (
+                        <div key={member.id} className="bg-black/40 border border-white/10 rounded-xl p-3 sm:p-4 flex flex-col relative overflow-hidden group">
+                          
+                          {/* Role Badge */}
+                          <div className="absolute top-0 right-0">
+                            {member.role === 'captain' && <span className="bg-yellow-500/20 text-yellow-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-yellow-500/30">Captain</span>}
+                            {member.role === 'co-captain' && <span className="bg-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-blue-500/30">Co-Captain</span>}
+                            {member.role === 'spieler' && <span className="bg-white/10 text-gray-300 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-white/10">Spieler</span>}
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {/* Profilbild Placeholder */}
+                            <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shrink-0 overflow-hidden">
+                              <span className="text-sm">👤</span>
+                            </div>
+                            <div className="flex flex-col overflow-hidden">
+                              <span className="text-white font-bold text-sm truncate">
+                                {member.profiles?.ea_ingame_name || member.profiles?.discord_id || "Unbekannt"}
+                              </span>
+                              <span className="text-gray-500 text-xs truncate">
+                                {member.profiles?.discord_id && member.role !== 'captain' && !member.profiles.discord_id.match(/^[0-9]+$/) ? `@${member.profiles.discord_id}` : ""}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Action Area (Nur Captain darf ändern, und er darf sich selbst nicht ändern/löschen) */}
+                          {currentTeam.user_id === user?.id && member.role !== 'captain' && (
+                            <div className="mt-4 pt-3 border-t border-white/5 flex gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300">
+                              <select 
+                                value={member.role} 
+                                onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                                className="flex-1 bg-white/5 border border-white/10 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-yellow-500 cursor-pointer"
+                              >
+                                <option value="spieler">Spieler</option>
+                                <option value="co-captain">Co-Captain</option>
+                              </select>
+                              
+                              <button 
+                                onClick={() => handleKickMember(member.id, member.profiles?.ea_ingame_name || "Spieler")}
+                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                                title="Kicken"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      
+                      {members.length === 0 && (
+                        <div className="col-span-1 md:col-span-2 text-center text-gray-500 text-sm py-6">
+                          Keine Mitglieder gefunden.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -858,7 +1020,6 @@ export default function MeineTeamsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
                     {cosmeticTab === "banner" && (
                       <>
-                        {/* 🔥 Flache Kacheln ohne Zoom, ohne Text-Overlay. Sperre mit festem dunklem Hintergrund statt Blur. 🔥 */}
                         <button disabled={teamStats.level < 8} onClick={() => handleSelectCosmetic('banner', '0')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 8 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '0' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
                           <img src="/rewards/banner_0.png" alt="Basic Banner" className="absolute inset-0 w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
                           {teamStats.level < 8 && (
@@ -967,6 +1128,44 @@ export default function MeineTeamsPage() {
         </div>}
       </main>
 
+      {/* --- ADD MEMBER MODAL (JETZT NUR NOCH ALS LINK-ANZEIGE) --- */}
+      {showAddMemberModal && currentTeam && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
+          <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 transform-gpu flex flex-col">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <h3 className="text-xl md:text-2xl font-black text-white">Spieler einladen</h3>
+              <button onClick={() => setShowAddMemberModal(false)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition-colors">✕</button>
+            </div>
+            
+            <div className="flex-1">
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-6">
+                <h4 className="text-white font-bold mb-2 flex items-center gap-2">🔗 Einladungslink</h4>
+                <p className="text-xs text-gray-400 mb-5 leading-relaxed">
+                  Kopiere diesen Link und schicke ihn deinen Spielern z.B. über Discord. Sie können dem Team dann mit einem Klick beitreten.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${currentTeam.id}`} 
+                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-gray-400 truncate outline-none cursor-copy"
+                    onClick={handleCopyInviteLink}
+                  />
+                  <button onClick={handleCopyInviteLink} className="bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-3 rounded-xl font-bold text-sm transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
+                    Kopieren
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end shrink-0 pt-4 border-t border-white/10">
+              <button onClick={() => setShowAddMemberModal(false)} className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3.5 rounded-xl transition-colors text-sm">Schließen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ... andere Modals (Delete, Waitlist) bleiben gleich ... */}
       {showDeleteModal && currentTeam && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
           <div className="bg-[#0a0a0a] border border-red-500/20 rounded-3xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(220,38,38,0.15)] animate-in zoom-in-95 transform-gpu">
