@@ -7,15 +7,21 @@ export default function Anmelden() {
   const { tournaments, loading: tournamentsLoading, refreshTournaments } = useTournaments();
 
   const [user, setUser] = useState<any>(null);
+  
+  // Für komplett neue User ohne Teams (Fallback)
   const [teamname, setTeamname] = useState<{ [key: number]: string }>({});
   const [captain, setCaptain] = useState<{ [key: number]: string }>({});
+  
+  // Speichert alle Teams des Users und das gewählte Team für die Anmeldung
+  const [ownedTeams, setOwnedTeams] = useState<any[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<{ [key: number]: string }>({});
+  
   const [loading, setLoading] = useState<{ [key: number]: boolean }>({});
   const [success, setSuccess] = useState<{ [key: number]: boolean }>({});
   const [message, setMessage] = useState<string | null>(null);
   
   const [discordUser, setDiscordUser] = useState<any>(null);
   const [isCheckingDiscord, setIsCheckingDiscord] = useState<boolean>(true);
-  const [existingDbTeam, setExistingDbTeam] = useState<any>(null);
   const [dbCheckDone, setDbCheckDone] = useState<boolean>(false);
 
   const requiredRoleId = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
@@ -35,14 +41,15 @@ export default function Anmelden() {
       setUser(currentUser);
 
       if (currentUser) {
+        // Lade ALLE Teams, die der User erstellt hat (und die nicht gelöscht sind)
         const { data: teams } = await supabase
           .from("teams")
-          .select("id, teamname, captain, is_active")
-          .eq("user_id", currentUser.id);
+          .select("id, teamname, captain, is_active, user_id")
+          .eq("user_id", currentUser.id)
+          .eq("is_deleted", false);
         
-        if (teams && teams.length > 0) {
-          const activeTeam = teams.find((t: any) => t.is_active) || teams[0];
-          setExistingDbTeam(activeTeam);
+        if (teams) {
+          setOwnedTeams(teams);
         }
       }
       setDbCheckDone(true);
@@ -70,16 +77,14 @@ export default function Anmelden() {
     checkDiscord();
   }, []);
 
+  // Standardwerte setzen
   useEffect(() => {
     if (tournaments.length === 0 || !dbCheckDone || isCheckingDiscord) return;
 
     let defaultTeam = "";
     let defaultCaptain = "";
 
-    if (existingDbTeam) {
-      defaultTeam = existingDbTeam.teamname;
-      defaultCaptain = existingDbTeam.captain || "";
-    } else if (discordUser && discordUser.nick) {
+    if (discordUser && discordUser.nick) {
       const parts = discordUser.nick.split("|");
       defaultTeam = parts[0] ? parts[0].trim() : discordUser.nick;
       defaultCaptain = parts[1] ? parts[1].trim() : "";
@@ -100,7 +105,7 @@ export default function Anmelden() {
       });
       return updated;
     });
-  }, [discordUser, tournaments, existingDbTeam, dbCheckDone, isCheckingDiscord]);
+  }, [discordUser, tournaments, dbCheckDone, isCheckingDiscord]);
 
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -124,7 +129,7 @@ export default function Anmelden() {
   const handleSubmit = async (e: any, tournamentId: number) => {
     e.preventDefault();
 
-    if (!discordUser || !hasRequiredRole || !user || !teamname[tournamentId]) {
+    if (!discordUser || !hasRequiredRole || !user) {
       return showMessage("Check deine Berechtigung / Eingabe");
     }
 
@@ -141,16 +146,24 @@ export default function Anmelden() {
 
       let currentTeamId;
       
-      const { data: teams } = await supabase
-        .from("teams")
-        .select("id, is_active")
-        .eq("user_id", user.id);
-
-      const activeTeam = teams?.find((t) => t.is_active) || (teams && teams[0]);
-
-      if (activeTeam) {
-        currentTeamId = activeTeam.id;
+      // LOGIK: Hat der User schon Teams?
+      if (ownedTeams.length > 0) {
+        const availableTeams = ownedTeams.filter(ot => !registrations.some((r: any) => r.team_id === ot.id));
+        
+        // Nimm das ausgewählte Team (oder das erste verfügbare als Fallback)
+        currentTeamId = selectedTeam[tournamentId] || availableTeams[0]?.id;
+        
+        if (!currentTeamId) {
+          setLoading((prev) => ({ ...prev, [tournamentId]: false }));
+          return showMessage("❌ Alle deine Teams sind bereits angemeldet.");
+        }
       } else {
+        // FALLBACK: User hat kein Team -> wir erstellen eins
+        if (!teamname[tournamentId]) {
+            setLoading((prev) => ({ ...prev, [tournamentId]: false }));
+            return showMessage("Teamname fehlt");
+        }
+
         const { data: newTeam, error: teamError } = await supabase
           .from("teams")
           .insert([{ 
@@ -165,9 +178,10 @@ export default function Anmelden() {
         if (teamError) throw teamError;
         currentTeamId = newTeam.id;
         
-        setExistingDbTeam(newTeam);
+        setOwnedTeams([newTeam]);
       }
 
+      // Team zum Turnier anmelden
       const { error: insertError } = await supabase.from("tournament_registrations").insert([{ team_id: currentTeamId, tournament_id: Number(tournamentId), status: status }]);
       if (insertError) throw insertError;
 
@@ -201,17 +215,16 @@ export default function Anmelden() {
             const isFull = t.max_teams && approvedCount >= t.max_teams;
             const isReady = t.draw_finished === true;
             const percent = t.max_teams ? Math.min((approvedCount / t.max_teams) * 100, 100) : 0;
-            const myRegistration = registrations.find((r: any) => r.teams?.user_id === user?.id);
-            const myTeam = myRegistration ? myRegistration.teams : null;
-            const isSuccess = success[t.id];
-
-            const isLocked = !!existingDbTeam;
             
-            const isApproved = myRegistration?.status === "approved";
-            const isWaiting = myRegistration?.status === "waiting";
+            // Finde ALLE Registrierungen dieses Users in DIESEM Turnier
+            const myRegistrations = registrations.filter((r: any) => r.teams?.user_id === user?.id);
+            const registeredTeamIds = myRegistrations.map((r: any) => r.team_id);
+            
+            // Finde heraus, welche Teams des Users NOCH NICHT in diesem Turnier sind
+            const availableTeams = ownedTeams.filter(ot => !registeredTeamIds.includes(ot.id));
 
             return (
-              <div key={t.id} className={`bg-white/5 backdrop-blur-lg border rounded-3xl p-6 shadow-xl flex flex-col gap-3 transition-all h-fit ${isApproved ? "border-green-500/50 ring-1 ring-green-500/20" : isWaiting ? "border-yellow-500/50 ring-1 ring-yellow-500/20" : "border-white/10"}`}>
+              <div key={t.id} className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl p-6 shadow-xl flex flex-col gap-3 transition-all h-fit">
                 <div>
                   <h3 className="text-xl md:text-2xl font-bold text-white drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{t.name}</h3>
                   <p className="text-sm text-gray-400 mt-1">{t.start_time ? new Date(t.start_time).toLocaleString() : "Kein Datum"}</p>
@@ -229,59 +242,110 @@ export default function Anmelden() {
                     <div className="text-green-400 text-xs font-bold animate-pulse text-center uppercase tracking-widest bg-green-500/10 py-2 rounded-lg border border-green-500/20">🔴 Live – Gruppen verfügbar</div>
                     <a href={`/tabelle?tournament=${t.id}`} className="w-full block p-3 md:p-4 rounded-2xl bg-blue-600 text-white text-center font-bold hover:bg-blue-500 transition shadow-lg">Zu den Gruppen →</a>
                   </div>
-                ) : myRegistration ? (
-                  <div className="flex flex-col gap-3 mt-auto">
-                    <div className={`p-2 rounded-2xl border text-center ${isApproved ? "bg-green-500/10 border-green-500/20" : "bg-yellow-500/10 border-yellow-500/20"}`}>
-                      <p className={`font-bold uppercase tracking-widest text-xs ${isApproved ? "text-green-400" : "text-yellow-500"}`}>
-                        {isApproved ? "✓ Angemeldet" : "⏳ Auf Warteliste"}
-                      </p>
-                      <p className="text-white text-sm font-semibold mt-1 truncate">{myTeam?.teamname}</p>
-                    </div>
-                    <button onClick={() => handleDelete(myRegistration.id, t.id)} disabled={loading[t.id]} className="w-full p-2 rounded-2xl bg-red-500/10 text-red-400 text-xs font-bold hover:bg-red-500/20 transition disabled:opacity-50 uppercase tracking-widest">Vom Turnier abmelden</button>
-                  </div>
                 ) : (
-                  <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-2 mt-auto">
-                    {!discordUser || !hasRequiredRole ? (
-                      <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col justify-center items-center text-center">
-                        <span className="text-gray-400 font-bold text-xs uppercase tracking-widest">Zugang gesperrt</span>
-                        <span className="text-gray-500 text-[10px] mt-1">Login & TeamVM Rolle benötigt</span>
+                  <div className="flex flex-col gap-3 mt-auto">
+                    
+                    {/* Bereits angemeldete Teams */}
+                    {myRegistrations.length > 0 && (
+                      <div className="flex flex-col gap-2 mb-2">
+                        {myRegistrations.map((reg: any) => {
+                          const isApproved = reg.status === "approved";
+                          return (
+                            <div key={reg.id} className="flex flex-col gap-2">
+                              <div className={`p-2 rounded-2xl border text-center ${isApproved ? "bg-green-500/10 border-green-500/20" : "bg-yellow-500/10 border-yellow-500/20"}`}>
+                                <p className={`font-bold uppercase tracking-widest text-[10px] mb-0.5 ${isApproved ? "text-green-400" : "text-yellow-500"}`}>
+                                  {isApproved ? "✓ Angemeldet" : "⏳ Auf Warteliste"}
+                                </p>
+                                <p className="text-white text-sm font-semibold truncate">{reg.teams?.teamname}</p>
+                              </div>
+                              <button onClick={() => handleDelete(reg.id, t.id)} disabled={loading[t.id]} className="w-full p-2 rounded-xl bg-red-500/10 text-red-400 text-[10px] font-bold hover:bg-red-500/20 transition disabled:opacity-50 uppercase tracking-widest">
+                                Team abmelden
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ) : (
-                      <>
-                        <input 
-                          type="text" 
-                          placeholder="Teamname" 
-                          value={teamname[t.id] ?? ""} 
-                          readOnly={isLocked}
-                          onChange={(e) => !isLocked && setTeamname((prev) => ({ ...prev, [t.id]: e.target.value }))} 
-                          className={`w-full p-2 rounded-2xl bg-black/40 border border-white/10 text-white outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed bg-black/60' : 'focus:border-yellow-500/50'}`} 
-                        />
-                        <input 
-                          type="text" 
-                          placeholder="Captain" 
-                          value={captain[t.id] ?? ""} 
-                          readOnly={isLocked}
-                          onChange={(e) => !isLocked && setCaptain((prev) => ({ ...prev, [t.id]: e.target.value }))} 
-                          className={`w-full p-2 rounded-2xl bg-black/40 border border-white/10 text-white outline-none transition-all ${isLocked ? 'opacity-70 cursor-not-allowed bg-black/60' : 'focus:border-yellow-500/50'}`} 
-                        />
-                      </>
                     )}
 
-                    {!discordUser || !hasRequiredRole ? (
-                      <a 
-                        href="https://discord.gg/Ajjx7eEdBX" 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
-                      >
-                        Discord Beitreten
-                      </a>
-                    ) : (
-                      <button disabled={loading[t.id] || isSuccess} className={`w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all ${isSuccess ? "bg-green-600 text-white" : "bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/20 active:scale-95"}`}>
-                        {loading[t.id] ? "Lädt..." : isSuccess ? "Erfolgreich!" : isFull ? "Auf Warteliste" : "Jetzt anmelden"}
-                      </button>
+                    {/* Formular für verbleibende Teams */}
+                    {(availableTeams.length > 0 || ownedTeams.length === 0) && (
+                      <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 pt-2 border-t border-white/10 mt-2">
+                        
+                        {!discordUser || !hasRequiredRole ? (
+                          <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col justify-center items-center text-center">
+                            <span className="text-gray-400 font-bold text-xs uppercase tracking-widest">Zugang gesperrt</span>
+                            <span className="text-gray-500 text-[10px] mt-1">Login & TeamVM Rolle benötigt</span>
+                          </div>
+                        ) : (
+                          <>
+                            {ownedTeams.length > 0 ? (
+                              // 🔥 NEU: Team-Auswahl per Buttons anstatt Dropdown
+                              <div className="flex flex-col gap-2">
+                                <span className="text-[10px] uppercase font-bold text-gray-500 tracking-widest ml-1">Team wählen:</span>
+                                <div className="flex flex-col gap-2">
+                                  {availableTeams.map((at) => {
+                                    const isSelected = (selectedTeam[t.id] || availableTeams[0]?.id) === at.id;
+                                    return (
+                                      <button
+                                        key={at.id}
+                                        type="button"
+                                        onClick={() => setSelectedTeam(prev => ({ ...prev, [t.id]: at.id }))}
+                                        className={`w-full p-3 rounded-xl text-sm font-bold text-left transition-all border ${
+                                          isSelected 
+                                          ? "bg-yellow-500/10 border-yellow-500/50 text-yellow-400 shadow-sm" 
+                                          : "bg-black/40 border-white/10 text-white hover:bg-white/5"
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <div className={`w-3 h-3 rounded-full border ${isSelected ? "border-yellow-400 bg-yellow-400" : "border-gray-500"} flex items-center justify-center shrink-0`}>
+                                            {isSelected && <div className="w-1.5 h-1.5 bg-black rounded-full"></div>}
+                                          </div>
+                                          <span className="truncate">{at.teamname}</span>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ) : (
+                              // FALLBACK: Wenn noch gar kein Team existiert
+                              <>
+                                <input 
+                                  type="text" 
+                                  placeholder="Teamname" 
+                                  value={teamname[t.id] ?? ""} 
+                                  onChange={(e) => setTeamname((prev) => ({ ...prev, [t.id]: e.target.value }))} 
+                                  className="w-full p-3 rounded-2xl bg-black/40 border border-white/10 text-white outline-none transition-all focus:border-yellow-500/50 text-sm" 
+                                />
+                                <input 
+                                  type="text" 
+                                  placeholder="Captain" 
+                                  value={captain[t.id] ?? ""} 
+                                  onChange={(e) => setCaptain((prev) => ({ ...prev, [t.id]: e.target.value }))} 
+                                  className="w-full p-3 rounded-2xl bg-black/40 border border-white/10 text-white outline-none transition-all focus:border-yellow-500/50 text-sm" 
+                                />
+                              </>
+                            )}
+                          </>
+                        )}
+
+                        {!discordUser || !hasRequiredRole ? (
+                          <a 
+                            href="https://discord.gg/Ajjx7eEdBX" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
+                          >
+                            Discord Beitreten
+                          </a>
+                        ) : (
+                          <button disabled={loading[t.id]} className="w-full p-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/20 active:scale-95">
+                            {loading[t.id] ? "Lädt..." : isFull ? "Auf Warteliste setzen" : "Team Anmelden"}
+                          </button>
+                        )}
+                      </form>
                     )}
-                  </form>
+                  </div>
                 )}
               </div>
             );

@@ -796,27 +796,28 @@ export default function MeineTeamsPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-3 text-center">
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                    {/* 🔥 NEUES LAYOUT: ABGESCHNITTENE TORE BEHOBEN 🔥 */}
+                    <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-center">
+                      <div className="w-[30%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.participations || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Events</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Events</span>
                       </div>
-                      <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-3 flex flex-col justify-center relative overflow-hidden">
+                      <div className="w-[30%] sm:flex-1 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
                         <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold truncate">Siege</span>
+                        <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold">Siege</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                      <div className="w-[30%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top3 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Top 4</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Top 4</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                      <div className="w-[46%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top5 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Top 8</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Top 8</span>
                       </div>
-                      <div className="bg-black/20 border border-white/5 rounded-2xl p-3 flex flex-col justify-center">
+                      <div className="w-[46%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.total_goals_scored || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold truncate">Tore</span>
+                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Tore</span>
                       </div>
                     </div>
                   </div>

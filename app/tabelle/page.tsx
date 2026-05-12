@@ -18,7 +18,7 @@ const getTierImage = (level: number) => {
   return "/Bronze.png";
 };
 
-// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen (als Objekt für die Cosmetics)
+// 🔥 HELPER: Holt die passende Farbe
 const getTierStyles = (level: number) => {
   const l = level || 1;
   if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
@@ -31,13 +31,11 @@ const getTierStyles = (level: number) => {
   return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
 };
 
-// 🔥 NEU: Die universelle TeamCard inkl. Cosmetics
+// 🔥 Die universelle TeamCard inkl. Cosmetics
 const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, isDu?: boolean, reverseOnMobile?: boolean }) => {
   if (!team) return <div className="flex-1" />;
 
   const tierStyles = getTierStyles(team.level);
-  
-  // Überprüfen der Cosmetics
   const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : tierStyles.border;
   const banner = team.equipped_banner;
   const bg = banner && banner !== 'default' 
@@ -66,15 +64,8 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, 
           <img src={getTierImage(team.level)} loading="lazy" decoding="async" className="w-8 h-8 object-contain shrink-0" alt="Rank" />
         )}
         <span
-        className={`
-          min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none
-          tracking-tight transition-colors duration-500
-          text-[clamp(10px,1vw,16px)]
-          ${textColor}
-        `}
-        style={{
-         fontSize: "clamp(10px, 1vw, 16px)",
-       }}
+        className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none tracking-tight transition-colors duration-500 text-[clamp(10px,1vw,16px)] ${textColor}`}
+        style={{ fontSize: "clamp(10px, 1vw, 16px)" }}
       >
         {team.name || team.teamname}
 
@@ -96,6 +87,7 @@ export default function TurnierTabelle() {
   const [loadingData, setLoadingData] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [myTeamRoles, setMyTeamRoles] = useState<any[]>([]);
   
   const [activeRound, setActiveRound] = useState<number | null>(null);
 
@@ -107,7 +99,6 @@ export default function TurnierTabelle() {
   const [matches, setMatches] = useState<any[]>([]);
   
   const [activeGroup, setActiveGroup] = useState<string>("ALL");
-  const [tournamentStats, setTournamentStats] = useState<any>({});
   const [scores, setScores] = useState<any>({});
 
   const fetchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,20 +118,56 @@ export default function TurnierTabelle() {
     return map;
   }, [teams]);
 
-  const userMatches = useMemo(() => {
+  const myAllTeamIds = useMemo(() => {
     if (!user) return [];
+    const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
+    const member = myTeamRoles.map(r => r.team_id);
+    return Array.from(new Set([...owned, ...member]));
+  }, [teams, user, myTeamRoles]);
+
+  const myManageableTeamIds = useMemo(() => {
+    if (!user) return [];
+    const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
+    const coCaptains = myTeamRoles.filter(r => r.role === 'captain' || r.role === 'co-captain').map(r => r.team_id);
+    return Array.from(new Set([...owned, ...coCaptains]));
+  }, [teams, user, myTeamRoles]);
+
+  const userMatches = useMemo(() => {
+    if (!user || myManageableTeamIds.length === 0) return [];
     return matches.filter(m => 
       m.match_type !== "ko" && 
-      (teams.find(t => t.id === m.team1_id)?.user_id === user?.id || 
-       teams.find(t => t.id === m.team2_id)?.user_id === user?.id)
+      (myManageableTeamIds.includes(m.team1_id) || myManageableTeamIds.includes(m.team2_id))
     );
-  }, [matches, teams, user]);
+  }, [matches, myManageableTeamIds, user]);
 
-  const activeUserMatch = useMemo(() => {
-    if (userMatches.length === 0) return null;
-    const unconfirmed = userMatches.find(m => m.status !== "confirmed");
-    return unconfirmed || userMatches[userMatches.length - 1];
-  }, [userMatches]);
+  // 🔥 NEU: Sucht für JEDES deiner Teams den aktuellsten (niedrigsten unbestätigten) Spieltag
+  const actionableRounds = useMemo(() => {
+    if (!userMatches || userMatches.length === 0) return [];
+    
+    const roundsToShow = new Set<number>();
+
+    // Für jedes Team, das der User managt...
+    myManageableTeamIds.forEach(teamId => {
+      // 1. Hole alle Matches für DIESES Team
+      const matchesForThisTeam = userMatches.filter(m => m.team1_id === teamId || m.team2_id === teamId);
+      
+      // 2. Suche die, die noch nicht "confirmed" sind
+      const unconfirmed = matchesForThisTeam.filter(m => m.status !== "confirmed");
+      
+      if (unconfirmed.length > 0) {
+        // 3. Wenn es noch offene gibt, nimm den mit der NIEDRIGSTEN Runden-Nummer (Spieltag)
+        const lowestRound = Math.min(...unconfirmed.map(m => m.round));
+        roundsToShow.add(lowestRound);
+      } else if (matchesForThisTeam.length > 0) {
+        // 4. Wenn alle Matches dieses Teams durch sind, zeige als "Archiv" den höchsten/letzten Spieltag
+        const highestRound = Math.max(...matchesForThisTeam.map(m => m.round));
+        roundsToShow.add(highestRound);
+      }
+    });
+
+    // Wandle das Set zurück in ein Array und sortiere es
+    return Array.from(roundsToShow).sort((a,b) => a - b);
+  }, [userMatches, myManageableTeamIds]);
 
   const matchesByGroup = useMemo(() => {
     const map: any = {};
@@ -155,16 +182,10 @@ export default function TurnierTabelle() {
   const calculateTable = (groupTeams: any[], groupMatches: any[]) => {
     const table: any = {};
     groupTeams.forEach((team) => {
-      // 🔥 NEU: Cosmetics aus der DB in die Tabelle durchschleifen
       table[team.id] = { 
-        id: team.id, 
-        name: team.teamname, 
-        level: team.level, 
-        logo_url: team.logo_url, 
-        equipped_banner: team.equipped_banner,
-        equipped_color: team.equipped_color,
-        equipped_border: team.equipped_border,
-        equipped_background: team.equipped_background,
+        id: team.id, name: team.teamname, level: team.level, logo_url: team.logo_url, 
+        equipped_banner: team.equipped_banner, equipped_color: team.equipped_color,
+        equipped_border: team.equipped_border, equipped_background: team.equipped_background,
         sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 
       };
     });
@@ -213,7 +234,18 @@ export default function TurnierTabelle() {
   }, [matchesByGroup, groups]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    const initUser = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      setUser(currentUser);
+      if (currentUser) {
+        const { data: roles } = await supabase
+          .from("team_members")
+          .select("team_id, role")
+          .eq("user_id", currentUser.id);
+        setMyTeamRoles(roles || []);
+      }
+    };
+    initUser();
   }, []);
 
   useEffect(() => {
@@ -251,13 +283,8 @@ export default function TurnierTabelle() {
       .eq("draw_finished", true);
     
     if (!data || data.length === 0) { 
-      setTournaments([]);
-      setSelectedTournament(null);
-      setGroups({});
-      setTeams([]);
-      setMatches([]);
-      setIsReady(true); 
-      setLoadingData(false); 
+      setTournaments([]); setSelectedTournament(null); setGroups({}); setTeams([]); setMatches([]);
+      setIsReady(true); setLoadingData(false); 
       return; 
     }
     
@@ -269,12 +296,7 @@ export default function TurnierTabelle() {
   const fetchData = async (isBackground = false) => {
     if (!isBackground && !isReady) setLoadingData(true);
     
-    const { data: regData } = await supabase
-      .from("tournament_registrations")
-      .select("teams(*)")
-      .eq("tournament_id", selectedTournament)
-      .eq("status", "approved"); 
-      
+    const { data: regData } = await supabase.from("tournament_registrations").select("teams(*)").eq("tournament_id", selectedTournament).eq("status", "approved"); 
     const { data: m } = await supabase.from("matches").select("*").eq("tournament_id", selectedTournament);
     const { data: g } = await supabase.from("group_assignments").select("*").eq("tournament_id", selectedTournament);
     
@@ -298,8 +320,7 @@ export default function TurnierTabelle() {
       setGroups({});
     }
     
-    setIsReady(true);
-    setLoadingData(false);
+    setIsReady(true); setLoadingData(false);
   };
 
   const getTeamName = (id: number) => teamMap[id]?.teamname || "Team";
@@ -309,51 +330,55 @@ export default function TurnierTabelle() {
   };
 
   const handleReport = async (matchId: number, s1: number, s2: number) => {
-    await supabase.from("matches").update({ score1: s1, score2: s2, status: "reported", reported_by: user.id }).eq("id", matchId);
+    const { error } = await supabase.from("matches").update({ score1: s1, score2: s2, status: "reported", reported_by: user.id }).eq("id", matchId);
+    if (error) {
+      alert("❌ Fehler beim Melden des Ergebnisses:\n\n" + error.message);
+      return;
+    }
     fetchData(true);
   };
 
   const handleConfirm = async (matchId: number) => {
-    // 1. Erstmal das Match normal bestätigen
-    await supabase.from("matches").update({ status: "confirmed", confirmed_by: user.id }).eq("id", matchId);
+    const { error: matchError } = await supabase.from("matches").update({ status: "confirmed", confirmed_by: user.id }).eq("id", matchId);
 
-    // 2. 🔥 AUTOMATISCHER XP-BOOST CHECK 🔥
-    const match = matches.find((m) => m.id === matchId);
-    if (match && match.score1 !== null && match.score2 !== null) {
-      const team1Wins = match.score1 > match.score2;
-      const team2Wins = match.score2 > match.score1;
-      
-      // Wer hat gewonnen?
-      const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
-      
-      if (winningTeamId) {
-        // Hat der Sieger einen aktiven Boost?
-        const { data: winnerData } = await supabase
-          .from('teams')
-          .select('active_xp_boosts, bonus_xp')
-          .eq('id', winningTeamId)
-          .single();
-          
-        if (winnerData && winnerData.active_xp_boosts > 0) {
-          // Bonus berechnen: 50 XP Pauschal + 10 XP pro geschossenem Tor
-          const goalsScored = team1Wins ? match.score1 : match.score2;
-          const extraXp = 50 + (goalsScored * 10); 
-
-          // Boost abziehen und XP gutschreiben
-          await supabase.from('teams').update({
-            active_xp_boosts: winnerData.active_xp_boosts - 1,
-            bonus_xp: (winnerData.bonus_xp || 0) + extraXp
-          }).eq('id', winningTeamId);
-        }
-      }
+    if (matchError) {
+      alert("❌ Fehler beim Bestätigen:\n\n" + matchError.message);
+      return; 
     }
 
-    // 3. UI neu laden
+    try {
+      const match = matches.find((m) => m.id === matchId);
+      if (match && match.score1 !== null && match.score2 !== null) {
+        const team1Wins = match.score1 > match.score2;
+        const team2Wins = match.score2 > match.score1;
+        const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
+        
+        if (winningTeamId) {
+          const { data: winnerData } = await supabase.from('teams').select('active_xp_boosts, bonus_xp').eq('id', winningTeamId).single();
+            
+          if (winnerData && winnerData.active_xp_boosts > 0) {
+            const goalsScored = team1Wins ? match.score1 : match.score2;
+            const extraXp = 50 + (goalsScored * 10); 
+            await supabase.from('teams').update({
+              active_xp_boosts: winnerData.active_xp_boosts - 1,
+              bonus_xp: (winnerData.bonus_xp || 0) + extraXp
+            }).eq('id', winningTeamId);
+          }
+        }
+      }
+    } catch (xpError) {
+      console.error("Fehler bei der XP-Vergabe:", xpError);
+    }
+
     fetchData(true);
   };
 
   const handleReject = async (matchId: number) => {
-    await supabase.from("matches").update({ score1: null, score2: null, status: "rejected", reported_by: null }).eq("id", matchId);
+    const { error } = await supabase.from("matches").update({ score1: null, score2: null, status: "rejected", reported_by: null }).eq("id", matchId);
+    if (error) {
+      alert("❌ Fehler beim Ablehnen:\n\n" + error.message);
+      return;
+    }
     fetchData(true);
   };
 
@@ -382,15 +407,18 @@ export default function TurnierTabelle() {
             </div>
 
             <div className="flex gap-2 flex-wrap items-center">
-              {activeUserMatch && (
+              {/* 🔥 MULTI-BUTTON LOGIK FÜR MEHRERE TEAMS / SPIELTAGE 🔥 */}
+              {actionableRounds.map(round => (
                 <button 
-                  onClick={() => setActiveRound(activeUserMatch.round)} 
+                  key={round}
+                  onClick={() => setActiveRound(round)} 
                   className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md hover:scale-105 transition-transform"
                 >
-                  Spieltag {activeUserMatch.round} eintragen
+                  Spieltag {round} verwalten
                 </button>
-              )}
-              <button onClick={() => setActiveGroup("ALL")} className={activeGroup === "ALL" ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5"}>Alle Gruppen</button>
+              ))}
+              
+              <button onClick={() => setActiveGroup("ALL")} className={activeGroup === "ALL" ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md ml-2" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5 ml-2"}>Alle Gruppen</button>
               {Object.keys(groups).map((g) => (
                 <button key={g} onClick={() => setActiveGroup(g)} className={activeGroup === g ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5"}>Gruppe {g}</button>
               ))}
@@ -403,7 +431,7 @@ export default function TurnierTabelle() {
               return (
                 <Fragment key={groupName}>
                   
-                  {/* 🔥 TABELLE - NEUER HINTERGRUND OHNE BLUR */}
+                  {/* 🔥 TABELLE */}
                   <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] min-h-[400px] overflow-hidden">
                     <div className="mb-3 border-b border-yellow-500/30 pb-2">
                       <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Gruppe {groupName}</span>
@@ -436,8 +464,7 @@ export default function TurnierTabelle() {
                               <span className="text-white/90 font-bold text-sm">{team.pkt}</span>
                               
                               <div className="col-span-5 flex items-center justify-start pr-2">
-                                {/* 🔥 HIER WIRD DIE TEAM-CARD GELADEN */}
-                                <TeamCard team={team} />
+                                <TeamCard team={team} isDu={myAllTeamIds.includes(team.id)} />
                               </div>
                               
                               <span>{team.sp}</span>
@@ -452,7 +479,7 @@ export default function TurnierTabelle() {
                     </div>
                   </div>
 
-                  {/* 🔥 SPIELPLAN - NEUER HINTERGRUND OHNE BLUR */}
+                  {/* 🔥 SPIELPLAN */}
                   {activeGroup !== "ALL" && (
                     <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex flex-col min-h-[400px]">
                       <div className="mb-4 border-b border-yellow-500/30 pb-2">
@@ -507,15 +534,67 @@ export default function TurnierTabelle() {
 
             <div className="space-y-4">
               {modalMatches.map((m) => {
-                const myTeamId = teams.find((t) => t.user_id === user?.id)?.id;
-                const isHome = m.team1_id === myTeamId;
-                const isAway = m.team2_id === myTeamId;
+                const isHome = myManageableTeamIds.includes(m.team1_id);
+                const isAway = myManageableTeamIds.includes(m.team2_id);
+                
                 const s1 = scores[m.id]?.s1 ?? (m.score1 !== null ? String(m.score1) : "");
                 const s2 = scores[m.id]?.s2 ?? (m.score2 !== null ? String(m.score2) : "");
 
+                let actionUI = null;
+
+                if (m.status === "confirmed") {
+                  actionUI = (
+                    <div className="text-center">
+                      <div className="text-green-500 font-bold text-2xl tracking-widest">{m.score1} : {m.score2}</div>
+                      <div className="text-[10px] text-green-500 mt-1 uppercase tracking-wider font-bold">✔ Bestätigt</div>
+                    </div>
+                  );
+                } else if (m.status === "reported") {
+                  // Wenn es eingetragen wurde und du Auswärts bist (oder beide Teams managst), darfst du bestätigen
+                  if (isAway) {
+                    actionUI = (
+                      <div className="flex flex-col items-center gap-2 w-full">
+                        <div className="font-bold text-2xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div>
+                        <div className="flex gap-2 w-full mt-1">
+                          <button onClick={() => handleConfirm(m.id)} className="flex-1 text-sm bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-white font-bold transition">✔</button>
+                          <button onClick={() => handleReject(m.id)} className="flex-1 text-sm bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-white font-bold transition">✖</button>
+                        </div>
+                      </div>
+                    );
+                  } else if (isHome) {
+                    actionUI = (
+                      <div className="text-center">
+                        <div className="font-bold text-2xl tracking-widest text-white">{m.score1} : {m.score2}</div>
+                        <div className="text-[10px] text-yellow-500 mt-1 uppercase tracking-wider font-bold">Wartet auf Bestätigung</div>
+                      </div>
+                    );
+                  }
+                } else { 
+                  // Status == null (Niemand hat was eingetragen)
+                  // Wenn du Heim bist (oder beide), darfst du eintragen
+                  if (isHome) {
+                    actionUI = (
+                      <div className="flex flex-col items-center gap-3 w-full">
+                        <div className="flex items-center gap-2">
+                          <input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
+                          <span className="font-bold text-gray-500">:</span>
+                          <input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
+                        </div>
+                        <button onClick={() => { if (s1 === "" || s2 === "") return alert("Bitte Ergebnis eintragen."); handleReport(m.id, Number(s1), Number(s2)); }} className="w-full text-sm bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-white font-bold transition">Melden</button>
+                      </div>
+                    );
+                  } else if (isAway) {
+                    actionUI = (
+                      <div className="text-center w-full">
+                        <div className="font-bold text-3xl text-white/20 tracking-widest mb-1">- : -</div>
+                        <div className="text-[10px] text-yellow-500 uppercase tracking-wider font-bold">⏳ Warten auf Heimteam</div>
+                      </div>
+                    );
+                  }
+                }
+
                 return (
                   <div key={m.id} className="flex flex-col sm:flex-row justify-between items-center bg-[#1e1e1e] p-5 rounded-2xl gap-4">
-                    
                     {m.status === "rejected" ? (
                       <div className="flex flex-col items-center justify-center w-full text-center gap-2 py-2">
                         <div className="text-red-500 font-bold text-lg md:text-xl tracking-wider uppercase flex items-center gap-2"><span>🚨</span> Konflikt: Ergebnis abgelehnt</div>
@@ -526,52 +605,11 @@ export default function TurnierTabelle() {
                       </div>
                     ) : (
                       <>
-                        {/* 🔥 TEAMCARD HEIM 🔥 */}
                         <TeamCard team={teamMap[m.team1_id]} isDu={isHome} />
-
                         <div className="flex flex-col items-center justify-center min-w-[120px]">
-                          {m.status === "confirmed" ? (
-                            <div className="text-center">
-                              <div className="text-green-500 font-bold text-2xl tracking-widest">{m.score1} : {m.score2}</div>
-                              <div className="text-[10px] text-green-500 mt-1 uppercase tracking-wider font-bold">✔ Bestätigt</div>
-                            </div>
-                          ) : isHome ? (
-                            m.status == null ? (
-                              <div className="flex flex-col items-center gap-3 w-full">
-                                <div className="flex items-center gap-2">
-                                  <input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
-                                  <span className="font-bold text-gray-500">:</span>
-                                  <input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
-                                </div>
-                                <button onClick={() => { if (s1 === "" || s2 === "") return alert("Bitte Ergebnis eintragen."); handleReport(m.id, Number(s1), Number(s2)); }} className="w-full text-sm bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-white font-bold transition">Melden</button>
-                              </div>
-                            ) : (
-                              <div className="text-center">
-                                <div className="font-bold text-2xl tracking-widest text-white">{m.score1} : {m.score2}</div>
-                                <div className="text-[10px] text-yellow-500 mt-1 uppercase tracking-wider font-bold">Wartet auf Bestätigung</div>
-                              </div>
-                            )
-                          ) : isAway ? (
-                            m.status == null ? (
-                              <div className="text-center w-full">
-                                <div className="font-bold text-3xl text-white/20 tracking-widest mb-1">- : -</div>
-                                <div className="text-[10px] text-yellow-500 uppercase tracking-wider font-bold">⏳ Warten auf Heimteam</div>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-2 w-full">
-                                <div className="font-bold text-2xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div>
-                                <div className="flex gap-2 w-full mt-1">
-                                  <button onClick={() => handleConfirm(m.id)} className="flex-1 text-sm bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-white font-bold transition">✔</button>
-                                  <button onClick={() => handleReject(m.id)} className="flex-1 text-sm bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-white font-bold transition">✖</button>
-                                </div>
-                              </div>
-                            )
-                          ) : null}
+                          {actionUI}
                         </div>
-
-                        {/* 🔥 TEAMCARD GAST 🔥 */}
                         <TeamCard team={teamMap[m.team2_id]} isDu={isAway} reverseOnMobile />
-                        
                       </>
                     )}
                   </div>

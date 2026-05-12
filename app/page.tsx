@@ -3,7 +3,7 @@ import Image from "next/image";
 
 export default function Home() {
   return (
-    <div className="fixed inset-0 z-0 flex flex-col justify-end">
+    <div className="fixed inset-0 z-0 flex flex-col justify-end bg-black">
       
       {/* HINTERGRUND-BILD */}
       <div className="absolute inset-0 -z-10">
@@ -26,7 +26,7 @@ export default function Home() {
       </div>
 
       {/* BUTTONS */}
-      <div className="relative z-10 flex w-full justify-center px-6 pb-6 sm:justify-start sm:pb-24 sm:pl-[12%]">
+      <div className="relative z-10 flex w-full justify-center px-6 pb-14 sm:justify-start sm:pb-24 sm:pl-[12%]">
         <div className="mx-auto flex w-full max-w-sm flex-col gap-4 sm:mx-0 sm:max-w-none sm:w-auto sm:flex-row sm:gap-6">
           
           {/* Button: Jetzt anmelden */}
@@ -37,7 +37,7 @@ export default function Home() {
             Jetzt anmelden
           </Link>
 
-          {/* Button: Spielplan ansehen -> Leitet jetzt auf /tabelle weiter */}
+          {/* Button: Spielplan ansehen */}
           <Link 
             href="/tabelle" 
             className="flex w-full items-center justify-center rounded-xl border border-white/20 bg-black/60 backdrop-blur-md px-8 py-4 text-center text-lg font-semibold text-white transition-all duration-300 active:scale-95 sm:w-auto"
@@ -47,6 +47,23 @@ export default function Home() {
           
         </div>
       </div>
+
+      {/* RECHTLICHE LINKS (FOOTER) */}
+      <div className="absolute bottom-4 w-full flex justify-center gap-6 z-10 text-xs font-light text-white/50">
+        <Link 
+          href="/impressum" 
+          className="hover:text-white transition-colors duration-300"
+        >
+          Impressum
+        </Link>
+        <Link 
+          href="/datenschutz" 
+          className="hover:text-white transition-colors duration-300"
+        >
+          Datenschutz
+        </Link>
+      </div>
+
     </div>
   );
 }

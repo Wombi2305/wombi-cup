@@ -8,6 +8,11 @@ export default function ProfilPage() {
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // States für das EA ID Feld
+  const [eaIdInput, setEaIdInput] = useState("");
+  const [savingEaId, setSavingEaId] = useState(false);
+  const [eaIdMessage, setEaIdMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -26,13 +31,45 @@ export default function ProfilPage() {
         .eq("id", currentUser.id)
         .single();
 
-      if (profileRes) setProfile(profileRes);
+      if (profileRes) {
+        setProfile(profileRes);
+        // EA ID im Eingabefeld vorbefüllen, falls schon eine existiert
+        setEaIdInput(profileRes.ea_ingame_name || "");
+      }
 
       setLoading(false);
     };
 
     fetchData();
   }, []);
+
+  // 🔥 EA ID in der Datenbank speichern
+  const handleSaveEaId = async () => {
+    if (!user) return;
+    setSavingEaId(true);
+    setEaIdMessage(null);
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ ea_ingame_name: eaIdInput })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      // Lokalen State aktualisieren, damit der Button deaktiviert wird
+      setProfile((prev: any) => ({ ...prev, ea_ingame_name: eaIdInput }));
+      setEaIdMessage({ text: "✅ Erfolgreich gespeichert!", type: "success" });
+      
+      // Erfolgsnachricht nach 3 Sekunden ausblenden
+      setTimeout(() => setEaIdMessage(null), 3000);
+    } catch (err: any) {
+      setEaIdMessage({ text: "❌ Fehler beim Speichern.", type: "error" });
+      setTimeout(() => setEaIdMessage(null), 3000);
+    } finally {
+      setSavingEaId(false);
+    }
+  };
 
   const { avatarUrl, discordName, hasAccess } = useMemo(() => {
     if (!user) return { avatarUrl: "", discordName: "", hasAccess: false };
@@ -52,6 +89,9 @@ export default function ProfilPage() {
   if (loading) return <div className="min-h-[calc(100vh-100px)] flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
   if (!user) return <div className="min-h-[calc(100vh-100px)] flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
 
+  // Hat der User die Eingabe geändert und muss noch speichern?
+  const hasUnsavedEaId = eaIdInput.trim() !== (profile?.ea_ingame_name || "");
+
   return (
     <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-10 pb-8 w-full max-w-5xl mx-auto text-white flex flex-col">
       <h1 className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-lg mb-8 text-center md:text-left">
@@ -60,7 +100,7 @@ export default function ProfilPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
         
-        {/* --- LINKE SPALTE: DISCORD INFO --- */}
+        {/* --- LINKE SPALTE: DISCORD INFO & EA ID --- */}
         <div className="md:col-span-1 bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl flex flex-col items-center text-center relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-yellow-500/10 rounded-full blur-3xl"></div>
           
@@ -80,6 +120,38 @@ export default function ProfilPage() {
             {profile?.role === "teilnehmer" && <span className="w-full bg-gray-500/10 text-gray-400 border border-gray-500/20 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2">🎮 Teilnehmer</span>}
             {profile?.role === "streamer" && <span className="w-full bg-purple-500/10 text-purple-400 border border-purple-500/20 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2">🎥 Streamer</span>}
           </div>
+
+          {/* 🔥 NEU: EA ID Feld 🔥 */}
+          <div className="mt-6 w-full flex flex-col gap-2 border-t border-white/10 pt-6">
+            <label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold text-left pl-1">EA ID (In-Game Name)</label>
+            <input
+              type="text"
+              value={eaIdInput}
+              onChange={(e) => setEaIdInput(e.target.value)}
+              placeholder="Deine EA ID eintragen..."
+              className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 transition-colors"
+            />
+            
+            <button
+              onClick={handleSaveEaId}
+              disabled={savingEaId || !hasUnsavedEaId}
+              className={`w-full py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+                hasUnsavedEaId 
+                  ? "bg-yellow-500 hover:bg-yellow-400 text-black shadow-[0_0_15px_rgba(250,204,21,0.2)]" 
+                  : "bg-white/5 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              {savingEaId ? "Speichert..." : "Speichern"}
+            </button>
+
+            {/* Erfolgs- / Fehlermeldung */}
+            {eaIdMessage && (
+              <span className={`text-xs mt-1 font-medium ${eaIdMessage.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                {eaIdMessage.text}
+              </span>
+            )}
+          </div>
+
         </div>
 
         {/* --- RECHTE SPALTE: SPIELER STATS (IN ARBEIT) ODER DISCORD JOIN --- */}
@@ -87,7 +159,7 @@ export default function ProfilPage() {
           {hasAccess ? (
             <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center text-center h-full relative overflow-hidden min-h-[400px]">
               
-              {/* 🔥 BILD CONTAINER (Ohne Zoom) 🔥 */}
+              {/* BILD CONTAINER */}
               <div className="w-full max-w-lg mb-6 relative rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] border border-white/5">
                 <img src="/Spieleranalys.png" alt="Teaser Spieleranalyse" className="w-full h-auto object-cover opacity-90" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent opacity-90"></div>
