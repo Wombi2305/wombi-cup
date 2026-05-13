@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-// 🔥 HELPER: Holt Bild und Level
+// 🔥 HELPER: Holt Bild und Level (Nur für die Optik)
 const getTeamStatsUI = (team: any) => {
   if (!team) return { level: 1, totalXp: 0, tierImage: "/Bronze.png" };
 
@@ -38,21 +38,26 @@ export default function RankingPage() {
 
   const fetchRanking = async () => {
     setLoading(true);
+    
+    // 🔥 BLAZING FAST: Die Datenbank macht jetzt die ganze Arbeit!
+    // Wir fordern die Daten perfekt sortiert aus der Datenbank an und begrenzen auf die Top 50.
     const { data } = await supabase
       .from("teams")
       .select("*")
       .gt("participations", 0) 
       .eq("is_deleted", false)
-      .order("wins_top1", { ascending: false })
-      .order("wins_top3", { ascending: false })
-      .order("wins_top5", { ascending: false });
+      .order("mmr", { ascending: false })                 // 1. Priorität: MMR
+      .order("goal_diff", { ascending: false })           // 2. Priorität: Tordifferenz
+      .order("total_goals_scored", { ascending: false })  // 3. Priorität: Tore geschossen
+      .limit(25);                                         // 🔥 LIMIT AUF TOP 50
 
     if (data) {
-      const rankedTeams = data.map(team => ({
+      // Wir fügen nur noch schnell die Bilder für die Ränge (Silber, Gold etc.) hinzu
+      const teamsWithUI = data.map(team => ({
         ...team,
         stats: getTeamStatsUI(team)
       }));
-      setRanking(rankedTeams);
+      setRanking(teamsWithUI);
     }
     setLoading(false);
   };
@@ -70,12 +75,11 @@ export default function RankingPage() {
       
       {/* --- HEADER BEREICH --- */}
       <div className="flex flex-col items-center mb-12 text-center overflow-visible">
-        {/* 🔥 FIX: tracking-tight (statt tighter) und pr-2 hinzugefügt, damit die '0' nicht abgeschnitten wird */}
         <h1 className="text-4xl md:text-7xl font-black tracking-tight uppercase italic text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 leading-[1.1] py-2 pr-2">
           Ranking Season 0
         </h1>
         <p className="text-gray-400 max-w-md text-sm md:text-base font-medium mt-2">
-          Die Elite des WombiCups im Überblick. Wer sichert sich den Thron?
+          Die Elite des WombiCups im Überblick. Die Top 50 kämpfen um den Thron!
         </p>
       </div>
 
@@ -87,17 +91,16 @@ export default function RankingPage() {
               <tr className="bg-white/5 text-[10px] md:text-xs uppercase tracking-[0.2em] text-gray-500 font-black whitespace-nowrap border-b border-white/10">
                 <th className="px-6 py-5 text-center w-20">Rank</th>
                 <th className="px-6 py-5">Team</th>
+                <th className="px-6 py-5 text-center text-purple-400 drop-shadow-md">Punkte</th>
                 <th className="px-6 py-5 text-center text-gray-400">Teilnahmen</th>
                 <th className="px-6 py-5 text-center text-yellow-500">🏆 Cup Siege</th>
                 <th className="px-6 py-5 text-center text-gray-400">🥈 Top 4</th>
                 <th className="px-6 py-5 text-center text-orange-400">🏅 Top 8</th>
-                <th className="px-6 py-5 text-center">Tore</th>
                 <th className="px-6 py-5 text-center w-24">Diff</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-sans relative z-10">
               {ranking.map((team, index) => {
-                const diff = (team.total_goals_scored || 0) - (team.total_goals_conceded || 0);
                 const isTop3 = index < 3;
 
                 return (
@@ -144,6 +147,11 @@ export default function RankingPage() {
                       </div>
                     </td>
 
+                    {/* MMR PUNKTE - Kommen jetzt direkt fertig aus der Datenbank! */}
+                    <td className="px-6 py-4 text-center font-black text-lg md:text-xl text-transparent bg-clip-text bg-gradient-to-br from-purple-400 to-blue-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.3)]">
+                      {(team.mmr || 1000).toLocaleString('de-DE')}
+                    </td>
+
                     <td className="px-6 py-4 text-center font-bold text-gray-300">
                       {team.participations || 0}
                     </td>
@@ -160,19 +168,14 @@ export default function RankingPage() {
                       {team.wins_top5 || 0}
                     </td>
 
-                    <td className="px-6 py-4 text-center text-xs md:text-sm font-medium text-gray-400">
-                      <span className="text-white/70">{team.total_goals_scored || 0}</span>
-                      <span className="mx-1 text-gray-600">:</span>
-                      <span className="text-white/70">{team.total_goals_conceded || 0}</span>
-                    </td>
-
+                    {/* Tordifferenz - Kommt jetzt direkt aus der DB! */}
                     <td className="px-6 py-4 text-center">
                       <span className={`font-black text-sm md:text-base px-2 py-1 rounded-lg ${
-                        diff > 0 ? 'text-green-400 bg-green-400/10' : 
-                        diff < 0 ? 'text-red-400 bg-red-400/10' : 
+                        team.goal_diff > 0 ? 'text-green-400 bg-green-400/10' : 
+                        team.goal_diff < 0 ? 'text-red-400 bg-red-400/10' : 
                         'text-gray-500 bg-gray-500/10'
                       }`}>
-                        {diff > 0 ? `+${diff}` : diff}
+                        {team.goal_diff > 0 ? `+${team.goal_diff}` : team.goal_diff || 0}
                       </span>
                     </td>
                   </tr>

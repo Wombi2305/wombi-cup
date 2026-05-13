@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image"; // 🔥 Der Next.js Image-Booster
 
 // 🔥 BILD-KOMPRIMIERUNG HELPER
 const resizeImage = (file: File, maxWidth = 400, maxHeight = 400): Promise<File> => {
@@ -9,7 +10,7 @@ const resizeImage = (file: File, maxWidth = 400, maxHeight = 400): Promise<File>
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
-      const img = new Image();
+      const img = new window.Image(); // Um Konflikte mit next/image zu vermeiden
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement("canvas");
@@ -198,22 +199,12 @@ export default function MeineTeamsPage() {
 
   const currentTeam = useMemo(() => allTeams.find(t => t.id === selectedTeamId), [allTeams, selectedTeamId]);
 
-  // Lade Teammitglieder wenn der Tab "members" aktiv ist
   useEffect(() => {
     const fetchMembers = async () => {
       if (!selectedTeamId || !currentTeam || activeTab !== "members") return;
       setLoadingMembers(true);
       
       try {
-        const theCaptain = {
-          id: `captain-${currentTeam.id}`,
-          user_id: currentTeam.user_id,
-          role: 'captain',
-          profiles: { 
-            ea_ingame_name: currentTeam.captain
-          }
-        };
-
         const { data, error } = await supabase
           .from('team_members')
           .select('id, user_id, role, profiles(id, ea_ingame_name)')
@@ -221,10 +212,11 @@ export default function MeineTeamsPage() {
 
         if (error) {
           console.error("Fehler beim Laden der Mitglieder", error.message);
-          setMembers([theCaptain]);
+          setMembers([]);
         } else {
-          const dbMembers = (data || []).filter(m => m.user_id !== currentTeam.user_id);
-          setMembers([theCaptain, ...dbMembers]);
+          const roleOrder: Record<string, number> = { 'captain': 1, 'co-captain': 2, 'spieler': 3 };
+          const sortedMembers = (data || []).sort((a, b) => (roleOrder[a.role] || 4) - (roleOrder[b.role] || 4));
+          setMembers(sortedMembers);
         }
       } catch (err) {
         console.error("Fehler beim Laden der Mitglieder", err);
@@ -513,6 +505,7 @@ export default function MeineTeamsPage() {
     setSaving(true);
     try {
       const isFirstTeam = allTeams.length === 0;
+      
       const { data: newTeam, error } = await supabase
         .from("teams")
         .insert([{ teamname, captain, user_id: user.id, is_active: isFirstTeam, logo_url: logoUrl }])
@@ -520,6 +513,12 @@ export default function MeineTeamsPage() {
         .single();
 
       if (error) throw error;
+      
+      const { error: memberError } = await supabase
+        .from("team_members")
+        .insert([{ team_id: newTeam.id, user_id: user.id, role: 'captain' }]);
+
+      if (memberError) throw memberError;
       
       const newTeamWithRole = { ...newTeam, myRole: 'captain' };
       setAllTeams(prev => [...prev, newTeamWithRole]);
@@ -569,7 +568,6 @@ export default function MeineTeamsPage() {
     }
   };
 
-  // --- LOGIK FÜR TEAMMITGLIEDER ---
   const handleRoleChange = async (memberId: string, newRole: string) => {
     try {
       const { error } = await supabase.from('team_members').update({ role: newRole }).eq('id', memberId);
@@ -645,7 +643,12 @@ export default function MeineTeamsPage() {
               <label className="relative cursor-pointer mb-3 block mt-1">
                 <div className="relative z-10 w-24 h-24 rounded-full border-4 border-[#1a1a1a] shadow-[0_0_15px_rgba(250,204,21,0.3)] bg-black/50 overflow-hidden flex items-center justify-center transition-transform duration-300">
                   {logoUrl ? (
-                    <img src={logoUrl} alt="Team Logo" className="w-full h-full object-cover" />
+                    <img 
+                      src={logoUrl} 
+                      alt="Team Logo" 
+                      className="w-full h-full object-cover" 
+                      fetchPriority="high" 
+                    />
                   ) : (
                     <span className="text-3xl text-gray-500">🛡️</span>
                   )}
@@ -658,7 +661,6 @@ export default function MeineTeamsPage() {
                   </div>
                 </div>
                 <div className="absolute inset-0 rounded-full border-2 border-yellow-500/50 scale-[1.05] pointer-events-none transition-transform duration-300 z-0"></div>
-                {/* LOGO UPLOAD NUR FÜR CAPTAINS & CO-CAPTAINS */}
                 <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo || currentTeam?.myRole === 'spieler'} />
               </label>
               
@@ -677,13 +679,31 @@ export default function MeineTeamsPage() {
                 <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
                 <div className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold transition duration-500 relative overflow-hidden ${previewSettings.border} ${previewSettings.bg}`}>
                   {previewSettings.banner !== 'default' && (
-                    <img src={`/rewards/banner_${previewSettings.banner}.png`} alt="" className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" onError={(e) => e.currentTarget.style.display = 'none'} />
+                    <Image 
+                      src={`/rewards/banner_${previewSettings.banner}.png`} 
+                      alt="" 
+                      width={400}
+                      height={100}
+                      className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" 
+                    />
                   )}
                   <div className="relative z-10 flex items-center gap-3 w-full">
                     {logoUrl ? (
-                      <img src={logoUrl} alt="Team Logo Preview" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" />
+                      <img 
+                        src={logoUrl} 
+                        alt="Team Logo Preview" 
+                        className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
+                        loading="lazy" 
+                        decoding="async" 
+                      />
                     ) : (
-                      <img src={teamStats.tierImage} alt="Rank" className="w-8 h-8 object-contain shrink-0" />
+                      <Image 
+                        src={teamStats.tierImage} 
+                        alt="Rank" 
+                        width={32}
+                        height={32}
+                        className="w-8 h-8 object-contain shrink-0" 
+                      />
                     )}
                     <span className={`whitespace-nowrap truncate tracking-tight transition-colors duration-500 ${previewSettings.colorClass}`}>
                       {teamname || "Teamname"}
@@ -702,7 +722,13 @@ export default function MeineTeamsPage() {
                 {allTeams.map((team) => (
                   <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-sm" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
                     {team.logo_url ? (
-                      <img src={team.logo_url} alt="Logo" className="w-5 h-5 rounded-full object-cover border border-white/20" />
+                      <img 
+                        src={team.logo_url} 
+                        alt="Logo" 
+                        className="w-5 h-5 rounded-full object-cover border border-white/20" 
+                        loading="lazy" 
+                        decoding="async" 
+                      />
                     ) : (
                       <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
                     )}
@@ -757,7 +783,6 @@ export default function MeineTeamsPage() {
                           <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span> Aktiv
                         </span>
                       ) : (
-                        // Nur Captain darf die globalen Team-Aktivitäts-Status ändern, um Konflikte zu vermeiden
                         currentTeam.myRole === 'captain' && (
                           <button onClick={handleMakeActive} disabled={saving} className="bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors">Als Aktiv setzen</button>
                         )
@@ -765,7 +790,21 @@ export default function MeineTeamsPage() {
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center gap-6 mb-4 mt-2">
-                      <img src={teamStats.tierImage} alt={`Rank Level ${teamStats.level}`} className="w-24 h-24 md:w-32 md:h-32 object-contain drop-shadow-[0_0_25px_rgba(250,204,21,0.2)]" />
+                      {/* 🔥 NEU: Der sichere Glow-Effekt ohne Kasten-Bug auf iOS */}
+                      <div className="relative shrink-0 flex items-center justify-center w-24 h-24 md:w-32 md:h-32">
+                        {/* Die leuchtende Kugel im Hintergrund */}
+                        <div className="absolute inset-0 bg-yellow-500/20 blur-xl rounded-full"></div>
+                        
+                        <Image 
+                          src={teamStats.tierImage} 
+                          alt={`Rank Level ${teamStats.level}`} 
+                          width={128}
+                          height={128}
+                          className="w-full h-full object-contain relative z-10" 
+                          priority 
+                        />
+                      </div>
+
                       <div className="flex-1 w-full">
                         <div className="flex justify-between items-end mb-3">
                           <div>
@@ -796,7 +835,6 @@ export default function MeineTeamsPage() {
                       </div>
                     </div>
 
-                    {/* 🔥 NEUES LAYOUT: ABGESCHNITTENE TORE BEHOBEN 🔥 */}
                     <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-center">
                       <div className="w-[30%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
                         <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.participations || 0}</span>
@@ -864,7 +902,6 @@ export default function MeineTeamsPage() {
                       <h3 className="text-lg font-black text-white">Der Kader</h3>
                       <p className="text-xs text-gray-400 mt-1">Verwalte hier deine Spieler und Co-Captains.</p>
                     </div>
-                    {/* Captain UND Co-Captain dürfen einladen */}
                     {(currentTeam.myRole === 'captain' || currentTeam.myRole === 'co-captain') && (
                       <button onClick={() => setShowAddMemberModal(true)} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
                         + Einladen
@@ -879,7 +916,6 @@ export default function MeineTeamsPage() {
                       {members.map((member) => (
                         <div key={member.id} className="bg-black/40 border border-white/10 rounded-xl p-3 sm:p-4 flex flex-col relative overflow-hidden group">
                           
-                          {/* Role Badge */}
                           <div className="absolute top-0 right-0">
                             {member.role === 'captain' && <span className="bg-yellow-500/20 text-yellow-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-yellow-500/30">Captain</span>}
                             {member.role === 'co-captain' && <span className="bg-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-blue-500/30">Co-Captain</span>}
@@ -903,7 +939,6 @@ export default function MeineTeamsPage() {
                             </div>
                           </div>
 
-                          {/* Action Area (Nur Captain darf ändern, und er darf sich selbst nicht ändern/löschen) */}
                           {currentTeam.myRole === 'captain' && member.role !== 'captain' && (
                             <div className="mt-4 pt-3 border-t border-white/5 flex gap-2 transition-opacity duration-300 relative">
                               
@@ -948,6 +983,8 @@ export default function MeineTeamsPage() {
                 <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-2">
                   
                   <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1 mt-1">Gutscheine & Tickets</h4>
+                  
+                  {/* 🔥 HIER SIND DIE BILDER JETZT OPTIMIERT 🔥 */}
                   <div className="grid grid-cols-3 gap-3 mb-2">
                     
                     {/* WARTELISTE */}
@@ -955,8 +992,14 @@ export default function MeineTeamsPage() {
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
                         <span className="text-[11px] font-black text-white">{currentTeam.waitlist_tickets || 0}x</span>
                       </div>
-                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1">
-                        <img src="/rewards/warteliste_skip.png" alt="Warteliste" className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" onError={(e) => e.currentTarget.style.opacity = '0'} />
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/warteliste_skip.png" 
+                          alt="Warteliste" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
                       </div>
                       <button onClick={() => handleRedeemTicket('waitlist_tickets', 'Wartelisten-Priorität')} disabled={saving || (currentTeam.waitlist_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-white/10 hover:bg-white/20 text-white border border-white/10 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Einlösen
@@ -968,8 +1011,14 @@ export default function MeineTeamsPage() {
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
                         <span className="text-[11px] font-black text-white">{currentTeam.feature_tickets || 0}x</span>
                       </div>
-                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1">
-                        <img src="/rewards/feature.png" alt="Feature" className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" />
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/feature.png" 
+                          alt="Feature" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
                       </div>
                       <button onClick={() => handleRedeemTicket('feature_tickets', 'Feature Match')} disabled={saving || (currentTeam.feature_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Einlösen
@@ -982,8 +1031,14 @@ export default function MeineTeamsPage() {
                         <span className="text-[11px] font-black text-white">{currentTeam.double_xp_matches || 0}x</span>
                         {(currentTeam.active_xp_boosts || 0) > 0 && <span className="text-[8px] text-purple-400 font-bold">({currentTeam.active_xp_boosts} Aktiv)</span>}
                       </div>
-                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1">
-                        <img src="/rewards/doppelte_xp.png" alt="Double XP" className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" />
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/doppelte_xp.png" 
+                          alt="Double XP" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
                       </div>
                       <button onClick={() => handleRedeemTicket('double_xp_matches', 'Double-XP Boost')} disabled={saving || (currentTeam.double_xp_matches || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Einlösen
@@ -995,8 +1050,14 @@ export default function MeineTeamsPage() {
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
                         <span className="text-[11px] font-black text-white">{currentTeam.cotw_tickets || 0}x</span>
                       </div>
-                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1">
-                        <img src="/rewards/club_der_woche.png" alt="Club der Woche" className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" />
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/club_der_woche.png" 
+                          alt="Club der Woche" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
                       </div>
                       <button onClick={() => handleRedeemTicket('cotw_tickets', 'Club der Woche Feature')} disabled={saving || (currentTeam.cotw_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Einlösen
@@ -1008,8 +1069,14 @@ export default function MeineTeamsPage() {
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
                         <span className="text-[11px] font-black text-white">{currentTeam.highlight_tickets || 0}x</span>
                       </div>
-                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1">
-                        <img src="/rewards/homepage_highlight.png" alt="HP Highlight" className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" />
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/homepage_highlight.png" 
+                          alt="HP Highlight" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
                       </div>
                       <button onClick={() => handleRedeemTicket('highlight_tickets', 'Homepage-Highlight für den Club')} disabled={saving || (currentTeam.highlight_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Einlösen
@@ -1021,8 +1088,14 @@ export default function MeineTeamsPage() {
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
                         <span className="text-[11px] font-black text-white">{currentTeam.random_tickets || 0}x</span>
                       </div>
-                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1">
-                        <img src="/rewards/mystery_reward.png" alt="Zufalls Loot" className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" />
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/mystery_reward.png" 
+                          alt="Zufalls Loot" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
                       </div>
                       <button onClick={() => handleRedeemTicket('random_tickets', 'Zufällige Belohnung auswürfeln')} disabled={saving || (currentTeam.random_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Einlösen
@@ -1038,11 +1111,18 @@ export default function MeineTeamsPage() {
                     <button onClick={() => setCosmeticTab("border")} className={`px-4 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold whitespace-nowrap transition-colors ${cosmeticTab === "border" ? "bg-white/10 text-white" : "bg-black/20 text-gray-500 hover:text-gray-300"}`}>Rahmen</button>
                   </div>
 
+                  {/* 🔥 BANNER BILDER OPTIMIERT 🔥 */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
                     {cosmeticTab === "banner" && (
                       <>
                         <button disabled={teamStats.level < 8} onClick={() => handleSelectCosmetic('banner', '0')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 8 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '0' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <img src="/rewards/banner_0.png" alt="Basic Banner" className="absolute inset-0 w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                          <Image 
+                            src="/rewards/banner_0.png" 
+                            alt="Basic Banner" 
+                            width={400}
+                            height={150}
+                            className="absolute inset-0 w-full h-full object-cover" 
+                          />
                           {teamStats.level < 8 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
                               <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 8</span>
@@ -1051,7 +1131,13 @@ export default function MeineTeamsPage() {
                         </button>
                         
                         <button disabled={teamStats.level < 22} onClick={() => handleSelectCosmetic('banner', '1')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 22 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <img src="/rewards/banner_1.png" alt="Upgraded Banner" className="absolute inset-0 w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                          <Image 
+                            src="/rewards/banner_1.png" 
+                            alt="Upgraded Banner" 
+                            width={400}
+                            height={150}
+                            className="absolute inset-0 w-full h-full object-cover" 
+                          />
                           {teamStats.level < 22 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
                               <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 22</span>
@@ -1060,7 +1146,13 @@ export default function MeineTeamsPage() {
                         </button>
                         
                         <button disabled={teamStats.level < 39} onClick={() => handleSelectCosmetic('banner', '2')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 39 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '2' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <img src="/rewards/banner_2.png" alt="Elite Banner" className="absolute inset-0 w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                          <Image 
+                            src="/rewards/banner_2.png" 
+                            alt="Elite Banner" 
+                            width={400}
+                            height={150}
+                            className="absolute inset-0 w-full h-full object-cover" 
+                          />
                           {teamStats.level < 39 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
                               <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 39</span>
@@ -1069,7 +1161,13 @@ export default function MeineTeamsPage() {
                         </button>
 
                         <button disabled={teamStats.level < 47} onClick={() => handleSelectCosmetic('banner', '3')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 47 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '3' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <img src="/rewards/banner_3.png" alt="Special Banner" className="absolute inset-0 w-full h-full object-cover" onError={(e) => e.currentTarget.style.display = 'none'} />
+                          <Image 
+                            src="/rewards/banner_3.png" 
+                            alt="Special Banner" 
+                            width={400}
+                            height={150}
+                            className="absolute inset-0 w-full h-full object-cover" 
+                          />
                           {teamStats.level < 47 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
                               <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 47</span>
@@ -1103,9 +1201,33 @@ export default function MeineTeamsPage() {
                   <div className="lg:hidden mt-4 mb-4">
                     <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
                     <div className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold transition duration-500 relative overflow-hidden ${previewSettings.border} ${previewSettings.bg}`}>
-                      {previewSettings.banner !== 'default' && <img src={`/rewards/banner_${previewSettings.banner}.png`} alt="" className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" onError={(e) => e.currentTarget.style.display = 'none'} />}
+                      {previewSettings.banner !== 'default' && (
+                        <Image 
+                          src={`/rewards/banner_${previewSettings.banner}.png`} 
+                          alt="" 
+                          width={400}
+                          height={100}
+                          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" 
+                        />
+                      )}
                       <div className="relative z-10 flex items-center gap-3 w-full">
-                        {logoUrl ? <img src={logoUrl} alt="Logo" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" /> : <img src={teamStats.tierImage} alt="Rank" className="w-8 h-8 object-contain shrink-0" />}
+                        {logoUrl ? (
+                          <img 
+                            src={logoUrl} 
+                            alt="Logo" 
+                            className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
+                            loading="lazy" 
+                            decoding="async" 
+                          />
+                        ) : (
+                          <Image 
+                            src={teamStats.tierImage} 
+                            alt="Rank" 
+                            width={32}
+                            height={32}
+                            className="w-8 h-8 object-contain shrink-0" 
+                          />
+                        )}
                         <span className={`whitespace-nowrap truncate tracking-tight transition-colors duration-500 ${previewSettings.colorClass}`}>{teamname || "Teamname"}</span>
                       </div>
                     </div>
