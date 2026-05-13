@@ -620,12 +620,12 @@ export default function MeineTeamsPage() {
 
   const hasUnsavedChanges = Object.keys(pendingCosmetics).length > 0;
 
-  if (loading) return <div className="min-h-[calc(100vh-100px)] flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
-  if (!user) return <div className="min-h-[calc(100vh-100px)] flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (!user) return <div className="min-h-screen flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
 
   return (
     <>
-      <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-6 pb-12 w-full max-w-6xl mx-auto text-white flex flex-col relative overflow-hidden">
+      <div className="px-4 sm:px-6 pt-6 pb-16 w-full max-w-6xl mx-auto text-white flex flex-col relative overflow-hidden">
         
         <div className="absolute top-[20%] left-[20%] w-[500px] h-[500px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
         <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-fuchsia-500/5 rounded-full blur-[150px] pointer-events-none z-0"></div>
@@ -835,29 +835,62 @@ export default function MeineTeamsPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-center">
-                      <div className="w-[30%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
-                        <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.participations || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Events</span>
-                      </div>
-                      <div className="w-[30%] sm:flex-1 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
-                        <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold">Siege</span>
-                      </div>
-                      <div className="w-[30%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
-                        <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top3 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Top 4</span>
-                      </div>
-                      <div className="w-[46%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
-                        <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.wins_top5 || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Top 8</span>
-                      </div>
-                      <div className="w-[46%] sm:flex-1 bg-black/20 border border-white/5 rounded-2xl p-2 sm:p-3 flex flex-col justify-center">
-                        <span className="text-white font-black text-lg md:text-xl drop-shadow-md">{currentTeam.total_goals_scored || 0}</span>
-                        <span className="text-[9px] md:text-[10px] text-gray-500 uppercase tracking-widest mt-1 font-semibold">Tore</span>
-                      </div>
-                    </div>
+                    {/* --- STATS GRID BUNT (GAMING THEME) --- */}
+                    {(() => {
+                      // Berechnung der Winrate (Basierend auf den einzelnen Matches)
+                      const matchesWon = currentTeam.total_match_wins || 0;
+                      const matchesLost = currentTeam.total_match_losses || 0;
+                      const totalMatches = matchesWon + matchesLost;
+                      const winrate = totalMatches > 0 ? Math.round((matchesWon / totalMatches) * 100) : 0;
+
+                      return (
+                        <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-center">
+                          
+                          {/* EVENTS (Lila / Fuchsia) */}
+                          <div className="w-[30%] sm:flex-1 bg-fuchsia-500/5 border border-fuchsia-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-fuchsia-500 to-transparent"></div>
+                            <span className="text-fuchsia-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(217,70,239,0.5)]">{currentTeam.participations || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-fuchsia-400/80 uppercase tracking-widest mt-1 font-semibold">Events</span>
+                          </div>
+                          
+                          {/* SIEGE (Gold / Gelb) */}
+                          <div className="w-[30%] sm:flex-1 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
+                            <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold">Siege</span>
+                          </div>
+                          
+                          {/* TOP 4 (Silber / Slate) */}
+                          <div className="w-[30%] sm:flex-1 bg-slate-400/5 border border-slate-400/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-slate-400 to-transparent"></div>
+                            <span className="text-slate-300 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(148,163,184,0.5)]">{currentTeam.wins_top3 || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-slate-400/80 uppercase tracking-widest mt-1 font-semibold">Top 4</span>
+                          </div>
+                          
+                          {/* TOP 8 (Bronze / Orange) */}
+                          <div className="w-[30%] sm:flex-1 bg-orange-500/5 border border-orange-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-orange-500 to-transparent"></div>
+                            <span className="text-orange-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">{currentTeam.wins_top5 || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-orange-400/80 uppercase tracking-widest mt-1 font-semibold">Top 8</span>
+                          </div>
+                          
+                          {/* TORE (Smaragd / Grün) */}
+                          <div className="w-[30%] sm:flex-1 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+                            <span className="text-emerald-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{currentTeam.total_goals_scored || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-emerald-400/80 uppercase tracking-widest mt-1 font-semibold">Tore</span>
+                          </div>
+
+                          {/* WINRATE (Blau) */}
+                          <div className="w-[30%] sm:flex-1 bg-blue-500/5 border border-blue-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+                            <span className="text-blue-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">{winrate}%</span>
+                            <span className="text-[9px] md:text-[10px] text-blue-400/80 uppercase tracking-widest mt-1 font-semibold">Winrate</span>
+                          </div>
+
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {currentTeam.myRole !== 'spieler' && (
@@ -1269,7 +1302,7 @@ export default function MeineTeamsPage() {
         {message && <div className="fixed top-24 right-4 sm:right-6 bg-[#111] text-white px-6 py-4 rounded-xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-4 border border-white/10 backdrop-blur-md flex items-center gap-3 font-medium">
           {message}
         </div>}
-      </main>
+      </div>
 
       {/* --- ADD MEMBER MODAL --- */}
       {showAddMemberModal && currentTeam && (

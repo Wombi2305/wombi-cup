@@ -86,14 +86,14 @@ export default function ProfilPage() {
     };
   }, [user, profile]);
 
-  if (loading) return <div className="min-h-[calc(100vh-100px)] flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
-  if (!user) return <div className="min-h-[calc(100vh-100px)] flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (!user) return <div className="min-h-screen flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
 
   // Hat der User die Eingabe geändert und muss noch speichern?
   const hasUnsavedEaId = eaIdInput.trim() !== (profile?.ea_ingame_name || "");
 
   return (
-    <main className="min-h-[calc(100vh-80px)] px-4 sm:px-6 pt-10 pb-8 w-full max-w-5xl mx-auto text-white flex flex-col">
+    <div className="px-4 sm:px-6 pt-10 pb-16 w-full max-w-5xl mx-auto text-white flex flex-col">
       <h1 className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-lg mb-8 text-center md:text-left">
         Mein <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">Profil</span>
       </h1>
@@ -189,6 +189,6 @@ export default function ProfilPage() {
         </div>
 
       </div>
-    </main>
+    </div>
   );
 }

@@ -27,12 +27,7 @@ export default function Anmelden() {
   const requiredRoleId = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
   const hasRequiredRole = discordUser?.roles?.includes(requiredRoleId);
 
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, []);
+  // 🔥 GELÖSCHT: Der useEffect, der document.body.style.overflow = "hidden" gesetzt hat!
 
   useEffect(() => {
     const init = async () => {
@@ -200,13 +195,15 @@ export default function Anmelden() {
 
   return (
     <>
-      <main className="h-[calc(100vh-80px)] overflow-hidden px-4 sm:px-6 pt-10 md:pt-16 pb-6 w-full max-w-6xl mx-auto flex flex-col">
+      {/* 🔥 GEÄNDERT: div statt main, und feste Höhen/Overflow-Regeln entfernt. Natürliches Layout. */}
+      <div className="px-4 sm:px-6 pt-10 md:pt-10 pb-16 w-full max-w-6xl mx-auto flex flex-col">
         
         <h1 className="text-3xl md:text-5xl font-black mb-8 md:mb-10 tracking-tight drop-shadow-lg text-white flex-shrink-0">
           Turnier <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">Anmeldung</span>
         </h1>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 flex-1 overflow-y-auto pr-2 pb-10">
+        {/* 🔥 GEÄNDERT: flex-1 und overflow-y-auto entfernt, damit es als ganz normale Seite scrollt */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 pb-10">
           {tournaments.map((t: any) => {
             const registrations = t.tournament_registrations || [];
             const approvedCount = registrations.filter((r: any) => r.status === "approved").length;
@@ -279,7 +276,6 @@ export default function Anmelden() {
                         ) : (
                           <>
                             {ownedTeams.length > 0 ? (
-                              // 🔥 NEU: Team-Auswahl per Buttons anstatt Dropdown
                               <div className="flex flex-col gap-2">
                                 <span className="text-[10px] uppercase font-bold text-gray-500 tracking-widest ml-1">Team wählen:</span>
                                 <div className="flex flex-col gap-2">
@@ -351,7 +347,7 @@ export default function Anmelden() {
             );
           })}
         </div>
-      </main>
+      </div>
 
       {message && <div className="fixed top-24 right-4 bg-black/90 text-white px-6 py-4 rounded-2xl shadow-2xl z-50 animate-in slide-in-from-top-4 border border-white/10 backdrop-blur-md font-bold">{message}</div>}
     </>

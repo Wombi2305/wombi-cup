@@ -48,22 +48,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* RECHTLICHE LINKS (FOOTER) */}
-      <div className="absolute bottom-4 w-full flex justify-center gap-6 z-10 text-xs font-light text-white/50">
-        <Link 
-          href="/impressum" 
-          className="hover:text-white transition-colors duration-300"
-        >
-          Impressum
-        </Link>
-        <Link 
-          href="/datenschutz" 
-          className="hover:text-white transition-colors duration-300"
-        >
-          Datenschutz
-        </Link>
-      </div>
-
     </div>
   );
 }

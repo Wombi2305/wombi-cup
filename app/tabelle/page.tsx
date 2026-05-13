@@ -70,9 +70,9 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, 
         {team.name || team.teamname}
 
        {isDu && (
-          <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
+         <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
            (Du)
-          </span>
+         </span>
         )}
       </span>
       </div>
@@ -140,32 +140,25 @@ export default function TurnierTabelle() {
     );
   }, [matches, myManageableTeamIds, user]);
 
-  // 🔥 NEU: Sucht für JEDES deiner Teams den aktuellsten (niedrigsten unbestätigten) Spieltag
   const actionableRounds = useMemo(() => {
     if (!userMatches || userMatches.length === 0) return [];
     
     const roundsToShow = new Set<number>();
 
-    // Für jedes Team, das der User managt...
     myManageableTeamIds.forEach(teamId => {
-      // 1. Hole alle Matches für DIESES Team
       const matchesForThisTeam = userMatches.filter(m => m.team1_id === teamId || m.team2_id === teamId);
       
-      // 2. Suche die, die noch nicht "confirmed" sind
       const unconfirmed = matchesForThisTeam.filter(m => m.status !== "confirmed");
       
       if (unconfirmed.length > 0) {
-        // 3. Wenn es noch offene gibt, nimm den mit der NIEDRIGSTEN Runden-Nummer (Spieltag)
         const lowestRound = Math.min(...unconfirmed.map(m => m.round));
         roundsToShow.add(lowestRound);
       } else if (matchesForThisTeam.length > 0) {
-        // 4. Wenn alle Matches dieses Teams durch sind, zeige als "Archiv" den höchsten/letzten Spieltag
         const highestRound = Math.max(...matchesForThisTeam.map(m => m.round));
         roundsToShow.add(highestRound);
       }
     });
 
-    // Wandle das Set zurück in ein Array und sortiere es
     return Array.from(roundsToShow).sort((a,b) => a - b);
   }, [userMatches, myManageableTeamIds]);
 
@@ -425,14 +418,15 @@ export default function TurnierTabelle() {
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          {/* 🔥 HIER IST DER FIX: items-start verhindert, dass die Boxen sich in der Höhe aufspannen */}
+          <div className="grid gap-6 lg:grid-cols-2 items-start">
             {Object.keys(groups).filter((g) => activeGroup === "ALL" || g === activeGroup).map((groupName) => {
               const table = currentTables[groupName] || [];
               return (
                 <Fragment key={groupName}>
                   
                   {/* 🔥 TABELLE */}
-                  <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] min-h-[400px] overflow-hidden">
+                  <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] overflow-hidden">
                     <div className="mb-3 border-b border-yellow-500/30 pb-2">
                       <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Gruppe {groupName}</span>
                     </div>
@@ -481,7 +475,7 @@ export default function TurnierTabelle() {
 
                   {/* 🔥 SPIELPLAN */}
                   {activeGroup !== "ALL" && (
-                    <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex flex-col min-h-[400px]">
+                    <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex flex-col">
                       <div className="mb-4 border-b border-yellow-500/30 pb-2">
                         <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Spielplan Gruppe {groupName}</span>
                       </div>
@@ -490,23 +484,37 @@ export default function TurnierTabelle() {
                           <div key={round} className="mb-5">
                             <div className="text-xs text-gray-400 mb-2 uppercase tracking-widest">Spieltag {round}</div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
-                              {games.map((m: any) => (
-                                <div key={m.id} className="flex justify-between items-center text-xs bg-white/5 hover:bg-white/10 transition px-2 py-2 rounded-lg border border-white/5">
-                                  
-                                  <div className="w-[40%] text-left truncate text-xs font-bold text-white/90">
-                                    {getTeamName(m.team1_id)}
+                              {games.map((m: any) => {
+                                // HIGHLIGHT LOGIK
+                                const isTeam1Mine = myAllTeamIds.includes(m.team1_id);
+                                const isTeam2Mine = myAllTeamIds.includes(m.team2_id);
+                                const isMyMatch = isTeam1Mine || isTeam2Mine;
+
+                                return (
+                                  <div 
+                                    key={m.id} 
+                                    className={`flex justify-between items-center text-xs transition px-2 py-2 rounded-lg border ${
+                                      isMyMatch 
+                                        ? 'bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20' 
+                                        : 'bg-white/5 border-white/5 hover:bg-white/10'
+                                    }`}
+                                  >
+                                    
+                                    <div className={`w-[40%] text-left truncate text-xs font-bold ${isTeam1Mine ? 'text-yellow-400' : 'text-white/90'}`}>
+                                      {getTeamName(m.team1_id)}
+                                    </div>
+
+                                    <span className="w-[15%] mx-1 text-center text-yellow-400 font-bold bg-black/40 py-1 rounded whitespace-nowrap">
+                                      {m.score1 != null ? `${m.score1} : ${m.score2}` : "- : -"}
+                                    </span>
+
+                                    <div className={`w-[40%] text-right truncate text-xs font-bold ${isTeam2Mine ? 'text-yellow-400' : 'text-white/90'}`}>
+                                      {getTeamName(m.team2_id)}
+                                    </div>
+
                                   </div>
-
-                                  <span className="w-[15%] mx-1 text-center text-yellow-400 font-bold bg-black/40 py-1 rounded whitespace-nowrap">
-                                    {m.score1 != null ? `${m.score1} : ${m.score2}` : "- : -"}
-                                  </span>
-
-                                  <div className="w-[40%] text-right truncate text-xs font-bold text-white/90">
-                                    {getTeamName(m.team2_id)}
-                                  </div>
-
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         ))}

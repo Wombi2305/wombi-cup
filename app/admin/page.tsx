@@ -28,6 +28,9 @@ export default function Admin() {
   const [editStartTime, setEditStartTime] = useState("");
   const [expandedRounds, setExpandedRounds] = useState<any>({});
 
+  // 🎨 UX-UPDATE: State für die Tab-Navigation innerhalb der Turniere
+  const [activeTabs, setActiveTabs] = useState<{ [key: number]: string }>({});
+
   // 🔥 States für den K.O.-Generator
   const [koSizes, setKoSizes] = useState<{[key: number]: number}>({});
   const [isGeneratingKo, setIsGeneratingKo] = useState(false);
@@ -104,7 +107,6 @@ export default function Admin() {
     await fetchGroups();
   };
 
-  // 🔥 ANGEPASST: Nutzt nun die Registrierungstabelle
   const fetchGroups = async () => {
     const { data: regs } = await supabase
       .from("tournament_registrations")
@@ -114,10 +116,9 @@ export default function Admin() {
     const { data: assignments } = await supabase.from("group_assignments").select("*");
     
     if (regs) {
-      // Map für die UI, damit nichts kaputt geht
       const mappedTeams = regs.map((r: any) => ({
           id: r.team_id,
-          registration_id: r.id, // 🔥 Wichtig für Status-Updates
+          registration_id: r.id,
           tournament_id: r.tournament_id,
           status: r.status,
           teamname: r.teams?.teamname,
@@ -140,7 +141,6 @@ export default function Admin() {
     }
   };
 
-  // 🔥 FINAL: Sauberer Status-Update-Code (ohne Trigger-Check, da wir den Trigger löschen)
   const updateTeamStatus = async (registrationId: number, status: "approved" | "waiting") => {
     const { error } = await supabase
       .from("tournament_registrations")
@@ -155,18 +155,14 @@ export default function Admin() {
     fetchData();
   };
 
-  // 🔥 ANGEPASST: 2-Schritt-Erstellung für das Dummy-Team MIT Max-Team Prüfung
   const addFreilos = async (tournamentId: number) => {
-    // 1. Das Turnier-Limit prüfen
     const tournament = tournaments.find(t => t.id === tournamentId);
     const approvedCount = teams.filter(x => x.tournament_id === tournamentId && x.status === "approved").length;
     
-    // Entscheiden: Ist noch Platz oder muss es auf die Warteliste?
     const targetStatus = (tournament?.max_teams && approvedCount >= tournament.max_teams) 
       ? "waiting" 
       : "approved";
 
-    // 2. Dummy Team anlegen (ohne tournament_id)
     const { data: newTeam, error: teamError } = await supabase.from("teams").insert([{
       teamname: "--- FREILOS ---"
     }]).select().single();
@@ -176,7 +172,6 @@ export default function Admin() {
       return;
     }
 
-    // 3. Registrierung für das Turnier erstellen (mit dynamischem Status)
     const { error: regError } = await supabase.from("tournament_registrations").insert([{
       team_id: newTeam.id,
       tournament_id: tournamentId,
@@ -205,7 +200,6 @@ export default function Admin() {
     fetchData();
   };
 
-  // 🔥 ANGEPASST: Nutzt nun tournament_registrations
   const handleTeamMovement = async (tournamentId: number, maxTeams: number) => {
     const { data: allRegs } = await supabase
       .from("tournament_registrations")
@@ -356,7 +350,6 @@ export default function Admin() {
     fetchData();
   };
 
-  // 🔥 INTERNE BERECHNUNG FÜR K.O. GENERATOR
   const calculateRankingsForKo = (tournamentId: number) => {
     const tGroups = groups[tournamentId];
     if (!tGroups) return [];
@@ -405,7 +398,6 @@ export default function Admin() {
     return allRankedTeams.filter(t => t.teamname !== "--- FREILOS ---");
   };
 
-  // 🔥 K.O.-PHASE GENERIEREN (Global Seeding)
   const generateKoPhase = async (tournamentId: number) => {
     const size = koSizes[tournamentId] || 8; 
 
@@ -472,7 +464,6 @@ export default function Admin() {
     setScoreInputs((prev: any) => ({ ...prev, [matchId]: { ...prev[matchId], [field]: value.replace(/[^0-9]/g, "") } }));
   };
 
-  // ✅ NEU: EINZELNES SPIEL SPEICHERN (Inkl. TS Fix für Auto-Advance)
   const saveSingleMatch = async (matchId: number) => {
     const input = scoreInputs[matchId];
     if (!input) return;
@@ -499,7 +490,6 @@ export default function Admin() {
       return;
     }
 
-    // 🔥 AUTO-ADVANCE für Admin
     const m = matches.find(x => x.id === matchId);
     if (m && m.match_type === "ko" && m.ko_round > 2) {
       const { data: roundMatches } = await supabase.from("matches").select("*").eq("tournament_id", m.tournament_id).eq("ko_round", m.ko_round).eq("match_type", "ko");
@@ -573,7 +563,6 @@ export default function Admin() {
     fetchData();
   };
 
-  // 🔥 Ladescreen während Authentifizierung geprüft wird
   if (loadingAuth) {
     return (
       <div className="h-screen flex items-center justify-center text-white font-medium">
@@ -582,7 +571,6 @@ export default function Admin() {
     );
   }
 
-  // 🔒 Seite blocken: Neues Design
   if (!loggedIn) {
     return (
       <main className="h-screen flex flex-col items-center justify-center text-white p-4 md:p-6 text-center">
@@ -613,33 +601,32 @@ export default function Admin() {
           const approvedTeams = teams.filter(x => x.tournament_id === t.id && x.status === "approved");
           const waitingTeams = teams.filter(x => x.tournament_id === t.id && x.status === "waiting");
           
-          // Matches für Gruppenphase
           const tournamentMatches = matches.filter(m => m.tournament_id === t.id && m.match_type !== "ko");
           const roundNumbers = Array.from(new Set(tournamentMatches.map(m => m.round || 1))).sort((a, b) => a - b);
           
-          // 🔥 PRÜFEN OB ALLE GRUPPENSPIELE FERTIG SIND
           const allGroupMatchesConfirmed = tournamentMatches.length > 0 && tournamentMatches.every(m => m.status === "confirmed");
-
-          // Matches für K.O. Phase
           const koMatches = matches.filter(m => m.tournament_id === t.id && m.match_type === "ko");
 
+          // 🎨 UX-UPDATE: Aktueller Tab für DIESES Turnier (Default: teams)
+          const currentTab = activeTabs[t.id] || "teams";
+
           return (
-            <div key={t.id} className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-5 md:p-8 shadow-2xl flex flex-col">
+            <div key={t.id} className="bg-[#0A0A0A] border border-white/10 rounded-3xl p-5 md:p-8 shadow-2xl flex flex-col relative">
               
+              {/* --- HEADER --- */}
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 border-b border-white/5 pb-4 xl:border-none xl:pb-0">
                 <div className="w-full xl:w-auto">
                   <h3 className="text-xl md:text-2xl font-bold break-words">{t.name}</h3>
                   <div className="flex flex-wrap gap-2 mt-3">
                     <button onClick={() => { 
-                      setEditingId(editingId === t.id ? null : t.id); 
+                      setEditingId(t.id); 
                       setEditName(t.name); 
                       setEditMax(t.max_teams || ""); 
                       setEditStartTime(t.start_time || ""); 
-                      setOpenDesignId(null); 
-                    }} className="text-[10px] md:text-xs px-3 py-1.5 bg-white/5 rounded-full border border-white/10 uppercase font-bold hover:bg-white/10 transition">✏️ Edit</button>
+                    }} className="text-[10px] md:text-xs px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 uppercase font-bold hover:bg-blue-500/20 transition">✏️ Edit</button>
                     
-                    <button onClick={() => { setOpenDesignId(openDesignId === t.id ? null : t.id); setEditingId(null); }} className="text-[10px] md:text-xs px-3 py-1.5 bg-white/5 rounded-full border border-white/10 uppercase font-bold hover:bg-white/10 transition">🎨 Design</button>
-                    <button onClick={() => duplicateTournament(t)} className="text-[10px] md:text-xs px-3 py-1.5 bg-white/5 rounded-full border border-white/10 uppercase font-bold hover:bg-white/10 transition">📄 Copy</button>
+                    <button onClick={() => setOpenDesignId(t.id)} className="text-[10px] md:text-xs px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20 uppercase font-bold hover:bg-purple-500/20 transition">🎨 Design</button>
+                    <button onClick={() => duplicateTournament(t)} className="text-[10px] md:text-xs px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 uppercase font-bold hover:bg-white/10 transition">📄 Copy</button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 w-full xl:w-auto justify-start xl:justify-end">
@@ -648,272 +635,312 @@ export default function Admin() {
                 </div>
               </div>
 
-              <div className="mb-4 flex flex-wrap gap-3 text-[10px] md:text-xs uppercase tracking-widest text-gray-400 font-bold">
-                <span className="text-green-400 bg-green-400/10 px-2 py-1 rounded">Bestätigt: {approvedTeams.length} / {t.max_teams || "∞"}</span>
-                {waitingTeams.length > 0 && <span className="text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">Warteliste: {waitingTeams.length}</span>}
-              </div>
-
-              <div className="mb-8">
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-2 border-b border-white/5 pb-1 font-bold">Anmeldungen verwalten</p>
-                <div className="max-h-48 overflow-y-auto pr-1 space-y-1">
-                  {teams.filter(team => team.tournament_id === t.id).map(team => (
-                    <div key={team.registration_id || team.id} className="flex justify-between items-center text-xs md:text-sm bg-white/5 px-3 py-2.5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
-                      <span className={`truncate max-w-[150px] sm:max-w-[200px] font-medium ${team.status === 'waiting' ? 'text-yellow-500/80' : 'text-white'}`}>
-                        {team.teamname}
-                      </span>
-                      <div className="flex gap-4">
-                        {/* 🔥 WICHTIG: Nutzt jetzt team.registration_id */}
-                        <button onClick={() => updateTeamStatus(team.registration_id, "approved")} className={`${team.status === 'approved' ? 'text-green-500 scale-110' : 'text-gray-500'} hover:scale-125 transition-transform text-base`}>✔</button>
-                        <button onClick={() => updateTeamStatus(team.registration_id, "waiting")} className={`${team.status === 'waiting' ? 'text-yellow-500 scale-110' : 'text-gray-500'} hover:scale-125 transition-transform text-base`}>⏳</button>
-                      </div>
-                    </div>
-                  ))}
-                  {teams.filter(team => team.tournament_id === t.id).length === 0 && (
-                    <div className="text-xs text-gray-500 text-center py-4 italic">Noch keine Teams angemeldet.</div>
-                  )}
-                </div>
-                
-                {/* 🔥 NEUER BUTTON: FREILOS HINZUFÜGEN 🔥 */}
-                <button onClick={() => addFreilos(t.id)} className="w-full mt-3 border border-dashed border-gray-600 text-gray-400 hover:text-white hover:border-white py-2 rounded-xl text-xs font-bold transition">
-                  + Dummy-Team (--- FREILOS ---) hinzufügen
+              {/* 🎨 UX-UPDATE: TAB NAVIGATION */}
+              <div className="flex gap-2 border-b border-white/10 mb-6 overflow-x-auto no-scrollbar">
+                <button 
+                  onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "teams" })} 
+                  className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'teams' ? 'text-white border-b-2 border-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  👥 Teams
+                </button>
+                <button 
+                  onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "gruppen" })} 
+                  className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'gruppen' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  ⚽ Gruppen
+                </button>
+                <button 
+                  onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "ko" })} 
+                  className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'ko' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  🏆 K.O.-Phase
                 </button>
               </div>
 
-              {editingId === t.id && (
-                <div className="mb-8 p-4 md:p-6 bg-white/5 rounded-2xl border border-white/10 space-y-4 animate-in fade-in slide-in-from-top-2">
-                  <h4 className="text-xs uppercase tracking-widest text-blue-400 font-bold mb-2">Turnier bearbeiten</h4>
-                  <div>
-                    <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Turniername</label>
-                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full p-2.5 bg-black/40 rounded-lg border border-white/10 text-sm focus:border-blue-500 outline-none transition" placeholder="Name" />
+              {/* --- TAB 1: TEAMS --- */}
+              {currentTab === "teams" && (
+                <div className="animate-in fade-in slide-in-from-bottom-2">
+                  <div className="mb-4 flex flex-wrap gap-3 text-[10px] md:text-xs uppercase tracking-widest text-gray-400 font-bold">
+                    <span className="text-green-400 bg-green-400/10 px-2 py-1 rounded">Bestätigt: {approvedTeams.length} / {t.max_teams || "∞"}</span>
+                    {waitingTeams.length > 0 && <span className="text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded">Warteliste: {waitingTeams.length}</span>}
                   </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Max. Teilnehmer (Teams)</label>
-                    <input type="number" value={editMax} onChange={(e) => setEditMax(e.target.value)} className="w-full p-2.5 bg-black/40 rounded-lg border border-white/10 text-sm focus:border-blue-500 outline-none transition" placeholder="z.B. 16" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Startzeitpunkt</label>
-                    <input type="datetime-local" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="w-full p-2.5 bg-black/40 rounded-lg border border-white/10 text-sm focus:border-blue-500 outline-none transition" />
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                      <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Anzahl Gruppen</label>
-                      <input type="number" placeholder="z.B. 2" value={t.group_count || ""} onChange={(e) => updateField(t.id, "group_count", Number(e.target.value))} className="w-full p-2.5 bg-black/40 rounded-lg border border-white/10 text-sm focus:border-blue-500 outline-none transition" />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Teams pro Gruppe</label>
-                      <input type="number" placeholder="z.B. 4" value={t.group_size || ""} onChange={(e) => updateField(t.id, "group_size", Number(e.target.value))} className="w-full p-2.5 bg-black/40 rounded-lg border border-white/10 text-sm focus:border-blue-500 outline-none transition" />
-                    </div>
-                  </div>
-                  <button onClick={() => saveEdit(t.id)} className="w-full bg-blue-600 py-3 rounded-xl font-bold text-sm hover:bg-blue-500 transition shadow-lg shadow-blue-900/20 mt-4">Speichern</button>
-                </div>
-              )}
 
-              {openDesignId === t.id && (
-                <div className="mb-8 p-4 bg-white/5 rounded-2xl border border-white/10 space-y-6 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex flex-wrap gap-4 text-xs">
-                    <div className="flex-1 min-w-[100px]"><p className="mb-1 uppercase font-bold text-gray-400">Top Plätze</p><input type="number" value={t.top_places || 2} onChange={(e) => updateField(t.id, "top_places", Number(e.target.value))} className="w-full bg-black/40 rounded-lg border border-white/10 p-2 outline-none focus:border-blue-500 transition" /></div>
-                    <div className="flex-1 min-w-[100px]"><p className="mb-1 uppercase font-bold text-gray-400">Bottom Plätze</p><input type="number" value={t.bottom_places || 1} onChange={(e) => updateField(t.id, "bottom_places", Number(e.target.value))} className="w-full bg-black/40 rounded-lg border border-white/10 p-2 outline-none focus:border-blue-500 transition" /></div>
-                  </div>
-                  <div>
-                    <p className="mb-2 text-xs uppercase font-bold text-gray-400">Farben (Top / Middle / Bottom)</p>
-                    <div className="flex flex-wrap gap-4">
-                      <input type="color" value={t.color_top || "#22c55e"} onChange={(e) => updateField(t.id, "color_top", e.target.value)} className="w-12 h-12 rounded cursor-pointer border-none bg-transparent" />
-                      <input type="color" value={t.color_middle || "#f97316"} onChange={(e) => updateField(t.id, "color_middle", e.target.value)} className="w-12 h-12 rounded cursor-pointer border-none bg-transparent" />
-                      <input type="color" value={t.color_bottom || "#ef4444"} onChange={(e) => updateField(t.id, "color_bottom", e.target.value)} className="w-12 h-12 rounded cursor-pointer border-none bg-transparent" />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-auto">
-                {!tournamentGroups ? (
-                  <p className="text-yellow-500 text-sm p-4 bg-yellow-500/5 rounded-xl border border-yellow-500/20 mb-2 font-bold text-center">⚠️ Warte auf Auslosung auf Draw-Seite...</p>
-                ) : (
-                  <div className="mb-8 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {Object.entries(tournamentGroups).map(([group, teams]: any) => (
-                        <div key={group} className="p-3 bg-white/5 rounded-xl border border-white/10">
-                          <p className="text-yellow-400 font-bold text-xs mb-2 text-center uppercase tracking-wider">Gruppe {group}</p>
-                          {teams.map((team: any, i: number) => (
-                            <div key={team.id} className="text-xs py-1.5 border-t border-white/5 flex gap-2">
-                              <span className="text-gray-500 w-4 text-right">{i + 1}.</span> 
-                              <span className="truncate font-medium">{team.teamname}</span>
-                            </div>
-                          ))}
+                  <div className="mb-4">
+                    <div className="max-h-64 overflow-y-auto pr-1 space-y-1">
+                      {teams.filter(team => team.tournament_id === t.id).map(team => (
+                        <div key={team.registration_id || team.id} className="flex justify-between items-center text-xs md:text-sm bg-white/5 px-3 py-2.5 rounded-xl border border-white/5 hover:bg-white/10 transition-colors">
+                          <span className={`truncate max-w-[150px] sm:max-w-[200px] font-medium ${team.status === 'waiting' ? 'text-yellow-500/80' : 'text-white'}`}>
+                            {team.teamname}
+                          </span>
+                          <div className="flex gap-4">
+                            <button onClick={() => updateTeamStatus(team.registration_id, "approved")} className={`${team.status === 'approved' ? 'text-green-500 scale-110' : 'text-gray-500'} hover:scale-125 transition-transform text-base`}>✔</button>
+                            <button onClick={() => updateTeamStatus(team.registration_id, "waiting")} className={`${team.status === 'waiting' ? 'text-yellow-500 scale-110' : 'text-gray-500'} hover:scale-125 transition-transform text-base`}>⏳</button>
+                          </div>
                         </div>
                       ))}
-                    </div>
-                    <button onClick={() => generateMatches(t.id)} className="w-full bg-blue-600 py-3 md:py-4 rounded-xl font-bold text-sm md:text-base hover:bg-blue-500 transition shadow-lg mt-2">⚽ Spielplan generieren</button>
-                  </div>
-                )}
-
-                {/* GRUPPENPHASE SPIELE ANZEIGEN */}
-                {tournamentMatches.length > 0 && (
-                  <div className="mt-8 border-t border-white/10 pt-6">
-                    <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                      <h4 className="font-bold text-lg">Gruppenphase Ergebnisse</h4>
+                      {teams.filter(team => team.tournament_id === t.id).length === 0 && (
+                        <div className="text-xs text-gray-500 text-center py-4 italic">Noch keine Teams angemeldet.</div>
+                      )}
                     </div>
                     
-                    <div className="space-y-4">
-                      {roundNumbers.map(roundNum => {
-                        const isExpanded = expandedRounds[`${t.id}-${roundNum}`];
-                        const roundMatches = tournamentMatches.filter(m => (m.round || 1) === roundNum);
-                        const groupsInRound = Array.from(new Set(roundMatches.map(m => m.group_name))).sort();
+                    <button onClick={() => addFreilos(t.id)} className="w-full mt-3 border border-dashed border-gray-600 text-gray-400 hover:text-white hover:border-white py-2 rounded-xl text-xs font-bold transition">
+                      + Dummy-Team (--- FREILOS ---) hinzufügen
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                        return (
-                          <div key={roundNum} className="bg-white/5 rounded-2xl overflow-hidden border border-white/10 transition-all">
-                            <button onClick={() => setExpandedRounds((p: any) => ({...p, [`${t.id}-${roundNum}`]: !isExpanded}))} className="w-full p-4 flex justify-between items-center hover:bg-white/10 transition text-sm">
-                              <span className="font-bold text-purple-400 uppercase tracking-widest">Spieltag {roundNum}</span>
-                              <span className="text-[10px] text-gray-400 font-bold bg-black/40 px-3 py-1 rounded-full">{isExpanded ? "SCHLIESSEN ▲" : "ÖFFNEN ▼"}</span>
-                            </button>
-                            
-                            {isExpanded && (
-                              <div className="p-2 sm:p-4 space-y-6 bg-black/20 border-t border-white/5">
-                                {groupsInRound.map(groupName => (
-                                  <div key={groupName}>
-                                    <p className="text-[10px] text-yellow-500 font-bold uppercase mb-2 ml-2 tracking-wider">Gruppe {groupName}</p>
-                                    <div className="w-full overflow-x-auto rounded-xl">
-                                      <table className="w-full text-xs md:text-sm bg-black/40 min-w-[300px]">
-                                        <tbody>
-                                          {roundMatches.filter(m => m.group_name === groupName).map(m => (
-                                            <tr key={m.id} className="border-t border-white/5 first:border-none hover:bg-white/5 transition-colors">
-                                              <td className="p-2 md:p-3 w-[35%] text-right font-medium truncate max-w-[100px] md:max-w-[150px]">{teams.find(x => x.id === m.team1_id)?.teamname}</td>
-                                              
-                                              <td className="p-2 md:p-3 w-[30%] text-center">
-                                                <div className="flex items-center justify-center gap-1 sm:gap-2">
-                                                  <input
-                                                    type="tel"
-                                                    value={scoreInputs[m.id]?.s1 ?? m.score1 ?? ""}
-                                                    onChange={(e) => handleScoreChange(m.id, "s1", e.target.value)}
-                                                    className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-blue-500 focus:bg-white/20 transition text-base font-bold"
-                                                  />
-                                                  <span className="font-bold text-gray-500">:</span>
-                                                  <input
-                                                    type="tel"
-                                                    value={scoreInputs[m.id]?.s2 ?? m.score2 ?? ""}
-                                                    onChange={(e) => handleScoreChange(m.id, "s2", e.target.value)}
-                                                    className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-blue-500 focus:bg-white/20 transition text-base font-bold"
-                                                  />
-                                                  <button onClick={() => saveSingleMatch(m.id)} className="ml-2 bg-green-600 hover:bg-green-500 text-white text-xs px-2 py-1.5 rounded transition shadow-sm" title="Speichern">✔</button>
-                                                </div>
-                                              </td>
-                                              
-                                              <td className="p-2 md:p-3 w-[35%] text-left font-medium truncate max-w-[100px] md:max-w-[150px]">{teams.find(x => x.id === m.team2_id)?.teamname}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                ))}
+              {/* --- TAB 2: GRUPPENPHASE --- */}
+              {currentTab === "gruppen" && (
+                <div className="animate-in fade-in slide-in-from-bottom-2">
+                  {!tournamentGroups ? (
+                    <p className="text-yellow-500 text-sm p-4 bg-yellow-500/5 rounded-xl border border-yellow-500/20 mb-2 font-bold text-center">⚠️ Warte auf Auslosung auf Draw-Seite...</p>
+                  ) : (
+                    <div className="mb-8 space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {Object.entries(tournamentGroups).map(([group, teams]: any) => (
+                          <div key={group} className="p-3 bg-white/5 rounded-xl border border-white/10">
+                            <p className="text-green-400 font-bold text-xs mb-2 text-center uppercase tracking-wider">Gruppe {group}</p>
+                            {teams.map((team: any, i: number) => (
+                              <div key={team.id} className="text-xs py-1.5 border-t border-white/5 flex gap-2">
+                                <span className="text-gray-500 w-4 text-right">{i + 1}.</span> 
+                                <span className="truncate font-medium">{team.teamname}</span>
                               </div>
-                            )}
+                            ))}
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
+                      <button onClick={() => generateMatches(t.id)} className="w-full bg-green-600/20 border border-green-500/30 text-green-400 py-3 md:py-4 rounded-xl font-bold text-sm md:text-base hover:bg-green-600 hover:text-white transition shadow-lg mt-2">⚽ Spielplan generieren</button>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* 🔥 ADMIN BEREICH K.O. PHASE 🔥 */}
-                {t.started && (
-                  <div className="mt-8 border-t border-red-500/30 pt-6">
-                    <h4 className="font-bold text-red-400 uppercase tracking-widest mb-4">🏆 K.O.-Phase Generieren</h4>
-                    
-                    {!allGroupMatchesConfirmed ? (
-                      <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
-                        <p className="text-yellow-400 font-bold text-sm">⚠️ Die K.O.-Phase kann erst ausgelost werden, wenn ALLE Gruppenspiele beendet und bestätigt sind.</p>
-                      </div>
-                    ) : koMatches.length > 0 ? (
-                      <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                        <p className="text-red-400 font-bold text-sm">Die K.O.-Phase wurde bereits generiert.</p>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col sm:flex-row gap-4 bg-black/20 p-4 rounded-xl border border-white/5">
-                        <select
-                          className="bg-black/50 border border-white/10 text-white p-3 rounded-lg font-bold outline-none focus:border-red-400"
-                          value={koSizes[t.id] || 8}
-                          onChange={(e) => setKoSizes({ ...koSizes, [t.id]: Number(e.target.value) })}
-                        >
-                          <option value={64}>1/32-Finale (64 Teams)</option>
-                          <option value={32}>Sechzehntelfinale (32 Teams)</option>
-                          <option value={16}>Achtelfinale (16 Teams)</option>
-                          <option value={8}>Viertelfinale (8 Teams)</option>
-                          <option value={4}>Halbfinale (4 Teams)</option>
-                          <option value={2}>Finale (2 Teams)</option>
-                        </select>
-                        <button
-                          onClick={() => generateKoPhase(t.id)}
-                          disabled={isGeneratingKo}
-                          className="flex-1 bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl font-bold transition shadow-lg disabled:opacity-50"
-                        >
-                          {isGeneratingKo ? "Generiere..." : "🔥 K.O.-Baum auslosen"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {/* GRUPPENPHASE SPIELE ANZEIGEN */}
+                  {tournamentMatches.length > 0 && (
+                    <div className="mt-8 border-t border-white/10 pt-6">
+                      <div className="space-y-4">
+                        {roundNumbers.map(roundNum => {
+                          const isExpanded = expandedRounds[`${t.id}-${roundNum}`];
+                          const roundMatches = tournamentMatches.filter(m => (m.round || 1) === roundNum);
+                          const groupsInRound = Array.from(new Set(roundMatches.map(m => m.group_name))).sort();
 
-                {/* K.O. SPIELE ANZEIGEN & BEARBEITEN */}
-                {koMatches.length > 0 && (
-                  <div className="mt-8 border-t border-white/10 pt-6">
-                    <h4 className="font-bold text-lg mb-6 text-yellow-400">K.O.-Phase Ergebnisse</h4>
-                    <div className="space-y-4">
-                      {[64, 32, 16, 8, 4, 2, 1].filter(r => koMatches.some(m => m.ko_round === r)).map(roundSize => {
-                        const roundName = roundSize === 64 ? "1/32-Finale" : roundSize === 32 ? "Sechzehntelfinale" : roundSize === 16 ? "Achtelfinale" : roundSize === 8 ? "Viertelfinale" : roundSize === 4 ? "Halbfinale" : "Finale";
-                        const matchesInRound = koMatches.filter(m => m.ko_round === roundSize);
-                        const isExpanded = expandedRounds[`${t.id}-ko-${roundSize}`];
-
-                        return (
-                          <div key={roundSize} className="bg-white/5 rounded-2xl overflow-hidden border border-yellow-500/20 transition-all">
-                            <button onClick={() => setExpandedRounds((p: any) => ({...p, [`${t.id}-ko-${roundSize}`]: !isExpanded}))} className="w-full p-4 flex justify-between items-center hover:bg-white/10 transition text-sm">
-                              <span className="font-bold text-yellow-500 uppercase tracking-widest">{roundName}</span>
-                              <span className="text-[10px] text-gray-400 font-bold bg-black/40 px-3 py-1 rounded-full">{isExpanded ? "SCHLIESSEN ▲" : "ÖFFNEN ▼"}</span>
-                            </button>
-                            
-                            {isExpanded && (
-                              <div className="p-2 sm:p-4 bg-black/40 border-t border-yellow-500/20">
-                                <div className="w-full overflow-x-auto rounded-xl">
-                                  <table className="w-full text-xs md:text-sm bg-black/40 min-w-[300px]">
-                                    <tbody>
-                                      {matchesInRound.map(m => (
-                                        <tr key={m.id} className="border-t border-white/5 first:border-none hover:bg-white/5 transition-colors">
-                                          <td className="p-2 md:p-3 w-[35%] text-right font-medium truncate max-w-[100px] md:max-w-[150px] text-yellow-400">{teams.find(x => x.id === m.team1_id)?.teamname}</td>
-                                          
-                                          <td className="p-2 md:p-3 w-[30%] text-center">
-                                            <div className="flex items-center justify-center gap-1 sm:gap-2">
+                          return (
+                            <div key={roundNum} className="bg-white/5 rounded-2xl overflow-hidden border border-white/10 transition-all">
+                              <button onClick={() => setExpandedRounds((p: any) => ({...p, [`${t.id}-${roundNum}`]: !isExpanded}))} className="w-full p-4 flex justify-between items-center hover:bg-white/10 transition text-sm">
+                                <span className="font-bold text-green-400 uppercase tracking-widest">Spieltag {roundNum}</span>
+                                <span className="text-[10px] text-gray-400 font-bold bg-black/40 px-3 py-1 rounded-full">{isExpanded ? "SCHLIESSEN ▲" : "ÖFFNEN ▼"}</span>
+                              </button>
+                              
+                              {isExpanded && (
+                                <div className="p-2 sm:p-4 space-y-6 bg-black/20 border-t border-white/5">
+                                  {groupsInRound.map(groupName => (
+                                    <div key={groupName}>
+                                      <p className="text-[10px] text-gray-400 font-bold uppercase mb-2 ml-2 tracking-wider">Gruppe {groupName}</p>
+                                      
+                                      {/* 🎨 UX-UPDATE: FLEXBOX LAYOUT STATT TABLE FÜR SPIELE */}
+                                      <div className="flex flex-col gap-2">
+                                        {roundMatches.filter(m => m.group_name === groupName).map(m => (
+                                          <div key={m.id} className="flex items-center justify-between bg-black/40 p-2 md:p-3 rounded-xl border border-white/5">
+                                            <div className="flex-1 text-right truncate pr-2 md:pr-4 font-medium max-w-[40%] text-xs md:text-sm">
+                                              {teams.find(x => x.id === m.team1_id)?.teamname}
+                                            </div>
+                                            
+                                            <div className="shrink-0 flex items-center justify-center gap-1 md:gap-2">
                                               <input
                                                 type="tel"
                                                 value={scoreInputs[m.id]?.s1 ?? m.score1 ?? ""}
                                                 onChange={(e) => handleScoreChange(m.id, "s1", e.target.value)}
-                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-base font-bold text-yellow-300"
+                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-green-500 focus:bg-white/20 transition text-sm md:text-base font-bold"
                                               />
                                               <span className="font-bold text-gray-500">:</span>
                                               <input
                                                 type="tel"
                                                 value={scoreInputs[m.id]?.s2 ?? m.score2 ?? ""}
                                                 onChange={(e) => handleScoreChange(m.id, "s2", e.target.value)}
-                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-base font-bold text-yellow-300"
+                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-green-500 focus:bg-white/20 transition text-sm md:text-base font-bold"
                                               />
-                                              <button onClick={() => saveSingleMatch(m.id)} className="ml-2 bg-yellow-600 hover:bg-yellow-500 text-black text-xs px-2 py-1.5 rounded transition shadow-sm font-bold" title="Speichern">✔</button>
+                                              <button onClick={() => saveSingleMatch(m.id)} className="ml-1 md:ml-2 bg-green-600/80 hover:bg-green-500 text-white text-xs px-2.5 py-1.5 md:py-2 rounded-lg transition shadow-sm font-bold">✔</button>
                                             </div>
-                                          </td>
-                                          
-                                          <td className="p-2 md:p-3 w-[35%] text-left font-medium truncate max-w-[100px] md:max-w-[150px] text-yellow-400">{teams.find(x => x.id === m.team2_id)?.teamname}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                            
+                                            <div className="flex-1 text-left truncate pl-2 md:pl-4 font-medium max-w-[40%] text-xs md:text-sm">
+                                              {teams.find(x => x.id === m.team2_id)?.teamname}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                    </div>
+                                  ))}
                                 </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* --- TAB 3: K.O. PHASE --- */}
+              {currentTab === "ko" && (
+                <div className="animate-in fade-in slide-in-from-bottom-2">
+                  {!t.started ? (
+                     <p className="text-gray-500 text-sm text-center italic py-4">Turnier muss zuerst gestartet werden.</p>
+                  ) : (
+                    <div>
+                      {!allGroupMatchesConfirmed ? (
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl mb-6">
+                          <p className="text-yellow-400 font-bold text-sm">⚠️ Die K.O.-Phase kann erst ausgelost werden, wenn ALLE Gruppenspiele beendet und bestätigt sind.</p>
+                        </div>
+                      ) : koMatches.length > 0 ? (
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl mb-6 flex justify-between items-center">
+                          <p className="text-yellow-400 font-bold text-sm">K.O.-Phase ist aktiv.</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col sm:flex-row gap-4 bg-black/20 p-4 rounded-xl border border-white/5 mb-6">
+                          <select
+                            className="bg-black/50 border border-white/10 text-white p-3 rounded-lg font-bold outline-none focus:border-yellow-400 w-full sm:w-auto"
+                            value={koSizes[t.id] || 8}
+                            onChange={(e) => setKoSizes({ ...koSizes, [t.id]: Number(e.target.value) })}
+                          >
+                            <option value={64}>1/32-Finale (64 Teams)</option>
+                            <option value={32}>Sechzehntelfinale (32 Teams)</option>
+                            <option value={16}>Achtelfinale (16 Teams)</option>
+                            <option value={8}>Viertelfinale (8 Teams)</option>
+                            <option value={4}>Halbfinale (4 Teams)</option>
+                            <option value={2}>Finale (2 Teams)</option>
+                          </select>
+                          <button
+                            onClick={() => generateKoPhase(t.id)}
+                            disabled={isGeneratingKo}
+                            className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-black py-3 rounded-xl font-bold transition shadow-lg disabled:opacity-50"
+                          >
+                            {isGeneratingKo ? "Generiere..." : "🔥 K.O.-Baum auslosen"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* K.O. SPIELE ANZEIGEN */}
+                      {koMatches.length > 0 && (
+                        <div className="space-y-4">
+                          {[64, 32, 16, 8, 4, 2, 1].filter(r => koMatches.some(m => m.ko_round === r)).map(roundSize => {
+                            const roundName = roundSize === 64 ? "1/32-Finale" : roundSize === 32 ? "Sechzehntelfinale" : roundSize === 16 ? "Achtelfinale" : roundSize === 8 ? "Viertelfinale" : roundSize === 4 ? "Halbfinale" : "Finale";
+                            const matchesInRound = koMatches.filter(m => m.ko_round === roundSize);
+                            const isExpanded = expandedRounds[`${t.id}-ko-${roundSize}`];
+
+                            return (
+                              <div key={roundSize} className="bg-white/5 rounded-2xl overflow-hidden border border-yellow-500/20 transition-all">
+                                <button onClick={() => setExpandedRounds((p: any) => ({...p, [`${t.id}-ko-${roundSize}`]: !isExpanded}))} className="w-full p-4 flex justify-between items-center hover:bg-white/10 transition text-sm">
+                                  <span className="font-bold text-yellow-500 uppercase tracking-widest">{roundName}</span>
+                                  <span className="text-[10px] text-gray-400 font-bold bg-black/40 px-3 py-1 rounded-full">{isExpanded ? "SCHLIESSEN ▲" : "ÖFFNEN ▼"}</span>
+                                </button>
+                                
+                                {isExpanded && (
+                                  <div className="p-2 sm:p-4 bg-black/40 border-t border-yellow-500/20">
+                                    {/* 🎨 UX-UPDATE: FLEXBOX LAYOUT STATT TABLE */}
+                                    <div className="flex flex-col gap-2">
+                                      {matchesInRound.map(m => (
+                                        <div key={m.id} className="flex items-center justify-between bg-black/40 p-2 md:p-3 rounded-xl border border-yellow-500/20">
+                                          <div className="flex-1 text-right truncate pr-2 md:pr-4 font-medium max-w-[40%] text-xs md:text-sm text-yellow-400">
+                                            {teams.find(x => x.id === m.team1_id)?.teamname}
+                                          </div>
+                                          
+                                          <div className="shrink-0 flex items-center justify-center gap-1 md:gap-2">
+                                            <input
+                                              type="tel"
+                                              value={scoreInputs[m.id]?.s1 ?? m.score1 ?? ""}
+                                              onChange={(e) => handleScoreChange(m.id, "s1", e.target.value)}
+                                              className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-sm md:text-base font-bold text-yellow-300"
+                                            />
+                                            <span className="font-bold text-gray-500">:</span>
+                                            <input
+                                              type="tel"
+                                              value={scoreInputs[m.id]?.s2 ?? m.score2 ?? ""}
+                                              onChange={(e) => handleScoreChange(m.id, "s2", e.target.value)}
+                                              className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-sm md:text-base font-bold text-yellow-300"
+                                            />
+                                            <button onClick={() => saveSingleMatch(m.id)} className="ml-1 md:ml-2 bg-yellow-600 hover:bg-yellow-500 text-black text-xs px-2.5 py-1.5 md:py-2 rounded-lg transition shadow-sm font-bold">✔</button>
+                                          </div>
+                                          
+                                          <div className="flex-1 text-left truncate pl-2 md:pl-4 font-medium max-w-[40%] text-xs md:text-sm text-yellow-400">
+                                            {teams.find(x => x.id === m.team2_id)?.teamname}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 🎨 UX-UPDATE: EDIT MODAL (als Overlay über allem) */}
+              {editingId === t.id && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
+                  <div className="bg-[#111] p-6 md:p-8 rounded-3xl border border-blue-500/30 w-full max-w-sm shadow-2xl">
+                    <h4 className="text-sm uppercase tracking-widest text-blue-400 font-bold mb-6 text-center">Turnier bearbeiten</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Turniername</label>
+                        <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full p-3 bg-black/40 rounded-xl border border-white/10 text-sm focus:border-blue-500 outline-none transition mt-1" placeholder="Name" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Max. Teilnehmer (Teams)</label>
+                        <input type="number" value={editMax} onChange={(e) => setEditMax(e.target.value)} className="w-full p-3 bg-black/40 rounded-xl border border-white/10 text-sm focus:border-blue-500 outline-none transition mt-1" placeholder="z.B. 16" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Startzeitpunkt</label>
+                        <input type="datetime-local" value={editStartTime} onChange={(e) => setEditStartTime(e.target.value)} className="w-full p-3 bg-black/40 rounded-xl border border-white/10 text-sm focus:border-blue-500 outline-none transition mt-1" />
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Anzahl Gruppen</label>
+                          <input type="number" placeholder="z.B. 2" value={t.group_count || ""} onChange={(e) => updateField(t.id, "group_count", Number(e.target.value))} className="w-full p-3 bg-black/40 rounded-xl border border-white/10 text-sm focus:border-blue-500 outline-none transition mt-1" />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-gray-500 uppercase ml-1 font-bold">Teams pro Gruppe</label>
+                          <input type="number" placeholder="z.B. 4" value={t.group_size || ""} onChange={(e) => updateField(t.id, "group_size", Number(e.target.value))} className="w-full p-3 bg-black/40 rounded-xl border border-white/10 text-sm focus:border-blue-500 outline-none transition mt-1" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 mt-8">
+                      <button onClick={() => saveEdit(t.id)} className="flex-1 bg-blue-600 py-3 rounded-xl font-bold text-sm hover:bg-blue-500 transition shadow-lg">Speichern</button>
+                      <button onClick={() => setEditingId(null)} className="flex-1 bg-white/10 py-3 rounded-xl font-bold text-sm hover:bg-white/20 transition">Abbrechen</button>
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+
+              {/* 🎨 UX-UPDATE: DESIGN MODAL (als Overlay) */}
+              {openDesignId === t.id && (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
+                  <div className="bg-[#111] p-6 md:p-8 rounded-3xl border border-purple-500/30 w-full max-w-sm shadow-2xl">
+                    <h4 className="text-sm uppercase tracking-widest text-purple-400 font-bold mb-6 text-center">Design anpassen</h4>
+                    <div className="space-y-6">
+                      <div className="flex flex-wrap gap-4 text-xs">
+                        <div className="flex-1 min-w-[100px]"><p className="mb-2 uppercase font-bold text-gray-400">Top Plätze</p><input type="number" value={t.top_places || 2} onChange={(e) => updateField(t.id, "top_places", Number(e.target.value))} className="w-full bg-black/40 rounded-xl border border-white/10 p-3 outline-none focus:border-purple-500 transition" /></div>
+                        <div className="flex-1 min-w-[100px]"><p className="mb-2 uppercase font-bold text-gray-400">Bottom Plätze</p><input type="number" value={t.bottom_places || 1} onChange={(e) => updateField(t.id, "bottom_places", Number(e.target.value))} className="w-full bg-black/40 rounded-xl border border-white/10 p-3 outline-none focus:border-purple-500 transition" /></div>
+                      </div>
+                      <div>
+                        <p className="mb-3 text-xs uppercase font-bold text-gray-400">Farben (Top / Mid / Bot)</p>
+                        <div className="flex justify-between gap-4 bg-black/40 p-4 rounded-xl border border-white/10">
+                          <input type="color" value={t.color_top || "#22c55e"} onChange={(e) => updateField(t.id, "color_top", e.target.value)} className="w-12 h-12 rounded-lg cursor-pointer border-none bg-transparent" />
+                          <input type="color" value={t.color_middle || "#f97316"} onChange={(e) => updateField(t.id, "color_middle", e.target.value)} className="w-12 h-12 rounded-lg cursor-pointer border-none bg-transparent" />
+                          <input type="color" value={t.color_bottom || "#ef4444"} onChange={(e) => updateField(t.id, "color_bottom", e.target.value)} className="w-12 h-12 rounded-lg cursor-pointer border-none bg-transparent" />
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={() => setOpenDesignId(null)} className="w-full mt-8 bg-purple-600 py-3 rounded-xl font-bold text-sm hover:bg-purple-500 transition shadow-lg">Fertig</button>
+                  </div>
+                </div>
+              )}
+
             </div>
           );
         })}
@@ -933,6 +960,7 @@ export default function Admin() {
         </div>
       )}
 
+      {/* ERSTELLEN MODAL */}
       {showPopup && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-[#111] p-6 md:p-8 rounded-3xl border border-white/10 w-full max-w-sm shadow-2xl">

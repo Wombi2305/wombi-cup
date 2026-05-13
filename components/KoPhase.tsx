@@ -16,7 +16,7 @@ const getTierImage = (level: number) => {
   return "/Bronze.png";
 };
 
-// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen (als Objekt für die Cosmetics)
+// 🔥 HELPER: Holt die passende Farbe
 const getTierStyles = (level: number) => {
   const l = level || 1;
   if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
@@ -34,7 +34,7 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, 
   // Wenn es noch kein Team gibt (TBD)
   if (!team || isTBD) {
     return (
-      <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} border border-white/5 bg-white/5 rounded-md px-3 py-1.5 text-sm font-bold flex-1 basis-0 min-w-0 text-gray-500 italic`}>
+      <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} border border-white/5 bg-white/5 rounded-md px-3 py-1.5 text-sm font-bold flex-1 min-w-0 text-gray-500 italic`}>
         <span className="truncate">TBD</span>
       </div>
     );
@@ -55,7 +55,7 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, 
     : tierStyles.text;
 
   return (
-    <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 basis-0 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
+    <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
       {banner && banner !== 'default' && (
         <img 
           src={`/rewards/banner_${banner}.png`} 
@@ -396,7 +396,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
           🔥 MODAL (SPIELE VERWALTEN)
       =============================== */}
       {isModalOpen && activeUserMatch && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#111] p-6 rounded-3xl w-full max-w-2xl border border-white/5 shadow-2xl max-h-[90vh] overflow-y-auto">
             
             <div className="flex justify-between items-center mb-6">
@@ -414,60 +414,72 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                 const s1 = scores[m.id]?.s1 ?? (m.score1 !== null ? String(m.score1) : "");
                 const s2 = scores[m.id]?.s2 ?? (m.score2 !== null ? String(m.score2) : "");
 
+                let actionUI = null;
+
+                if (m.status === "confirmed") {
+                  actionUI = (
+                    <div className="text-center">
+                      <div className="text-green-500 font-bold text-2xl tracking-widest">{m.score1} : {m.score2}</div>
+                      <div className="text-[10px] text-green-500 mt-1 uppercase tracking-wider font-bold">✔ Bestätigt</div>
+                    </div>
+                  );
+                } else if (m.status === "reported") {
+                  if (isAway) {
+                    actionUI = (
+                      <div className="flex flex-col items-center gap-2 w-full">
+                        <div className="font-bold text-2xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div>
+                        <div className="flex gap-2 w-full mt-1">
+                          <button onClick={() => handleConfirm(m.id)} className="flex-1 text-sm bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-white font-bold transition">✔</button>
+                          <button onClick={() => handleReject(m.id)} className="flex-1 text-sm bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-white font-bold transition">✖</button>
+                        </div>
+                      </div>
+                    );
+                  } else if (isHome) {
+                    actionUI = (
+                      <div className="text-center">
+                        <div className="font-bold text-2xl tracking-widest text-white">{m.score1} : {m.score2}</div>
+                        <div className="text-[10px] text-yellow-500 mt-1 uppercase tracking-wider font-bold">Wartet auf Bestätigung</div>
+                      </div>
+                    );
+                  }
+                } else {
+                  if (isHome) {
+                    actionUI = (
+                      <div className="flex flex-col items-center gap-3 w-full">
+                        <div className="flex items-center gap-2">
+                          <input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
+                          <span className="font-bold text-gray-500">:</span>
+                          <input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
+                        </div>
+                        <button onClick={() => { if (s1 === "" || s2 === "") return alert("Bitte Ergebnis eintragen."); handleReport(m.id, m); }} className="w-full text-sm bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-white font-bold transition">Melden</button>
+                      </div>
+                    );
+                  } else if (isAway) {
+                    actionUI = (
+                      <div className="text-center w-full">
+                        <div className="font-bold text-3xl text-white/20 tracking-widest mb-1">- : -</div>
+                        <div className="text-[10px] text-yellow-500 uppercase tracking-wider font-bold">⏳ Warten auf Heimteam</div>
+                      </div>
+                    );
+                  }
+                }
+
                 return (
                   <div key={m.id} className="flex flex-col sm:flex-row justify-between items-center bg-[#1e1e1e] p-5 rounded-2xl gap-4">
-                    
                     {m.status === "rejected" ? (
                       <div className="flex flex-col items-center justify-center w-full text-center gap-2 py-2">
-                        <div className="text-red-500 font-bold text-lg uppercase flex items-center gap-2"><span>🚨</span> Konflikt: Ergebnis abgelehnt</div>
-                        <div className="text-xs text-gray-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20 mt-1 max-w-lg">Bitte öffnet ein Ticket im Discord zur Klärung.</div>
+                        <div className="text-red-500 font-bold text-lg md:text-xl tracking-wider uppercase flex items-center gap-2"><span>🚨</span> Konflikt: Ergebnis abgelehnt</div>
+                        <div className="text-sm font-bold text-gray-300 bg-black/40 px-4 py-1.5 rounded-full mt-1">{team1?.name || team1?.teamname} <span className="text-white/30 mx-2">vs</span> {team2?.name || team2?.teamname}</div>
+                        <div className="text-xs md:text-sm text-gray-400 bg-red-500/10 p-3 md:p-4 rounded-xl border border-red-500/20 mt-2 max-w-lg">
+                          Es gab eine Unstimmigkeit beim Ergebnis. Bitte öffnet ein <strong>Ticket im Discord</strong> oder <strong>taggt einen Admin</strong> im Gruppen-Channel zur Klärung.
+                        </div>
                       </div>
                     ) : (
                       <>
-                        {/* TEAM 1 IM MODAL */}
                         <TeamCard team={team1} isTBD={!team1} isDu={isHome} />
-
-                        <div className="flex flex-col items-center justify-center min-w-[100px] md:min-w-[120px]">
-                          {m.status === "confirmed" ? (
-                            <div className="text-center">
-                              <div className="text-green-500 font-black text-2xl tracking-widest">{m.score1} : {m.score2}</div>
-                              <div className="text-[9px] text-green-500 mt-0.5 uppercase font-bold flex items-center justify-center gap-1">✔ BESTÄTIGT</div>
-                            </div>
-                          ) : isHome ? (
-                            m.status == null ? (
-                              <div className="flex flex-col items-center gap-2 w-full">
-                                <div className="flex items-center gap-2">
-                                  <input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-10 h-10 bg-[#0a0a0a] border border-white/10 text-white text-lg text-center rounded-lg font-bold focus:border-blue-500 focus:outline-none transition" />
-                                  <span className="font-bold text-gray-500">:</span>
-                                  <input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-10 h-10 bg-[#0a0a0a] border border-white/10 text-white text-lg text-center rounded-lg font-bold focus:border-blue-500 focus:outline-none transition" />
-                                </div>
-                                <button onClick={() => handleReport(m.id, m)} className="w-full text-xs bg-blue-600 hover:bg-blue-500 py-1.5 rounded-lg text-white font-bold transition shadow-md shadow-blue-900/20">Melden</button>
-                              </div>
-                            ) : (
-                              <div className="text-center">
-                                <div className="font-black text-2xl text-white">{m.score1} : {m.score2}</div>
-                                <div className="text-[9px] text-yellow-500 mt-0.5 uppercase font-bold">Wartet auf Bestätigung</div>
-                              </div>
-                            )
-                          ) : isAway ? (
-                            m.status == null ? (
-                              <div className="text-center w-full">
-                                <div className="font-black text-2xl text-white/20 tracking-widest mb-1">- : -</div>
-                                <div className="text-[9px] text-yellow-500 uppercase font-bold tracking-widest">⏳ Warte auf Gegner</div>
-                              </div>
-                            ) : (
-                              <div className="flex flex-col items-center gap-1.5 w-full">
-                                <div className="font-black text-2xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div>
-                                <div className="flex gap-1.5 w-full mt-0.5">
-                                  <button onClick={() => handleConfirm(m.id)} className="flex-1 text-xs bg-green-600 hover:bg-green-500 py-1.5 rounded-lg text-white font-bold transition shadow-md shadow-green-900/20">✔</button>
-                                  <button onClick={() => handleReject(m.id)} className="flex-1 text-xs bg-red-600 hover:bg-red-500 py-1.5 rounded-lg text-white font-bold transition shadow-md shadow-red-900/20">✖</button>
-                                </div>
-                              </div>
-                            )
-                          ) : null}
+                        <div className="flex flex-col items-center justify-center min-w-[120px]">
+                          {actionUI}
                         </div>
-
-                        {/* TEAM 2 IM MODAL */}
                         <TeamCard team={team2} isTBD={!team2} isDu={isAway} reverseOnMobile />
                       </>
                     )}

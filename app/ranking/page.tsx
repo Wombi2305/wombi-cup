@@ -46,10 +46,10 @@ export default function RankingPage() {
       .select("*")
       .gt("participations", 0) 
       .eq("is_deleted", false)
-      .order("mmr", { ascending: false })                 // 1. Priorität: MMR
-      .order("goal_diff", { ascending: false })           // 2. Priorität: Tordifferenz
+      .order("mmr", { ascending: false })                // 1. Priorität: MMR
+      .order("goal_diff", { ascending: false })          // 2. Priorität: Tordifferenz
       .order("total_goals_scored", { ascending: false })  // 3. Priorität: Tore geschossen
-      .limit(25);                                         // 🔥 LIMIT AUF TOP 50
+      .limit(25);                                        // 🔥 LIMIT AUF TOP 50 (Im Code steht aktuell 25, aber das Limit greift!)
 
     if (data) {
       // Wir fügen nur noch schnell die Bilder für die Ränge (Silber, Gold etc.) hinzu
@@ -71,7 +71,8 @@ export default function RankingPage() {
   }
 
   return (
-    <main className="min-h-[calc(100vh-100px)] px-4 sm:px-6 pt-10 md:pt-12 pb-24 w-full max-w-6xl mx-auto text-white">
+    <div className="px-4 sm:px-6 pt-10 md:pt-12 pb-24 w-full max-w-6xl mx-auto text-white">
+      {/* 🔥 GEÄNDERT: div statt main, und min-h-[calc...] entfernt */}
       
       {/* --- HEADER BEREICH --- */}
       <div className="flex flex-col items-center mb-12 text-center overflow-visible">
@@ -193,6 +194,6 @@ export default function RankingPage() {
           </table>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
