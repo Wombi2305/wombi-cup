@@ -1,5 +1,8 @@
 "use client";
 
+// 🔥 DIESE ZEILE DEAKTIVIERT DAS VERCEL CACHING FÜR DIESE SEITE 🔥
+export const dynamic = "force-dynamic";
+
 import { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import KoPhase from "@/components/KoPhase";
