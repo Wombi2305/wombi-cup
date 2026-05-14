@@ -27,8 +27,6 @@ export default function Anmelden() {
   const requiredRoleId = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
   const hasRequiredRole = discordUser?.roles?.includes(requiredRoleId);
 
-  // 🔥 GELÖSCHT: Der useEffect, der document.body.style.overflow = "hidden" gesetzt hat!
-
   useEffect(() => {
     const init = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -195,16 +193,15 @@ export default function Anmelden() {
 
   return (
     <>
-      {/* 🔥 GEÄNDERT: div statt main, und feste Höhen/Overflow-Regeln entfernt. Natürliches Layout. */}
       <div className="px-4 sm:px-6 pt-10 md:pt-10 pb-16 w-full max-w-6xl mx-auto flex flex-col">
         
         <h1 className="text-3xl md:text-5xl font-black mb-8 md:mb-10 tracking-tight drop-shadow-lg text-white flex-shrink-0">
           Turnier <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">Anmeldung</span>
         </h1>
 
-        {/* 🔥 GEÄNDERT: flex-1 und overflow-y-auto entfernt, damit es als ganz normale Seite scrollt */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 pb-10">
-          {tournaments.map((t: any) => {
+          {/* 🔥 HIER IST DER NEUE FILTER EINGEBAUT */}
+          {tournaments.filter((t: any) => t.status !== "finished" && !t.archived).map((t: any) => {
             const registrations = t.tournament_registrations || [];
             const approvedCount = registrations.filter((r: any) => r.status === "approved").length;
             const waiting = registrations.filter((r: any) => r.status === "waiting").length;

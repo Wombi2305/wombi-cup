@@ -110,6 +110,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   const [scores, setScores] = useState<any>({});
   
   const [localMatches, setLocalMatches] = useState<any[]>(matches);
+  const [myTeamRoles, setMyTeamRoles] = useState<any[]>([]); // 🔥 NEU: Rollen-State
   
   const [activeMobileRound, setActiveMobileRound] = useState<number | null>(null);
 
@@ -117,9 +118,40 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     setLocalMatches(matches);
   }, [matches]);
 
+  // 🔥 NEU: Rollen des Users abrufen
+  useEffect(() => {
+    const fetchRoles = async () => {
+      if (user) {
+        const { data: roles } = await supabase
+          .from("team_members")
+          .select("team_id, role")
+          .eq("user_id", user.id);
+        setMyTeamRoles(roles || []);
+      }
+    };
+    fetchRoles();
+  }, [user]);
+
   // ===============================
   // LOGIC
   // ===============================
+
+  // 🔥 NEU: Manageable Teams (Owner + Captains + Co-Captains)
+  const myManageableTeamIds = useMemo(() => {
+    if (!user) return [];
+    const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
+    const coCaptains = myTeamRoles.filter(r => r.role === 'captain' || r.role === 'co-captain').map(r => r.team_id);
+    return Array.from(new Set([...owned, ...coCaptains]));
+  }, [teams, user, myTeamRoles]);
+
+  // 🔥 NEU: All Teams (Für das "(Du)" Tag)
+  const myAllTeamIds = useMemo(() => {
+    if (!user) return [];
+    const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
+    const member = myTeamRoles.map(r => r.team_id);
+    return Array.from(new Set([...owned, ...member]));
+  }, [teams, user, myTeamRoles]);
+
   const koMatches = useMemo(() => {
     return localMatches.filter((m) => m.match_type === "ko");
   }, [localMatches]);
@@ -158,11 +190,11 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     return `Runde ${roundIndex + 1}`;
   };
 
+  // 🔥 UPDATE: Nimmt jetzt `myManageableTeamIds`
   const myKoMatches = useMemo(() => {
-    const myTeamId = teams.find((t) => t.user_id === user?.id)?.id;
-    if (!myTeamId) return [];
-    return koMatches.filter((m) => m.team1_id === myTeamId || m.team2_id === myTeamId);
-  }, [koMatches, teams, user]);
+    if (myManageableTeamIds.length === 0) return [];
+    return koMatches.filter((m) => myManageableTeamIds.includes(m.team1_id) || myManageableTeamIds.includes(m.team2_id));
+  }, [koMatches, myManageableTeamIds]);
 
   const activeUserMatch = useMemo(() => {
     if (myKoMatches.length === 0) return null;
@@ -307,7 +339,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                   
                   {/* TEAM 1 */}
                   <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team1Wins ? 'opacity-40' : ''}`}>
-                    <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && currentMobileRound === 2} />
+                    <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && currentMobileRound === 2} isDu={myAllTeamIds.includes(m.team1_id)} />
                     <div className="w-10 text-center font-black text-lg shrink-0">
                       <span className={isConfirmed ? (team1Wins ? "text-green-400" : "text-gray-500") : "text-gray-400"}>{m.score1 ?? "-"}</span>
                     </div>
@@ -315,7 +347,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
                   {/* TEAM 2 */}
                   <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team2Wins ? 'opacity-40' : ''}`}>
-                    <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && currentMobileRound === 2} />
+                    <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && currentMobileRound === 2} isDu={myAllTeamIds.includes(m.team2_id)} />
                     <div className="w-10 text-center font-black text-lg shrink-0">
                       <span className={isConfirmed ? (team2Wins ? "text-green-400" : "text-gray-500") : "text-gray-400"}>{m.score2 ?? "-"}</span>
                     </div>
@@ -368,7 +400,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                           
                           {/* TEAM 1 */}
                           <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team1Wins ? 'opacity-40' : ''}`}>
-                            <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && round === 2} />
+                            <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && round === 2} isDu={myAllTeamIds.includes(m.team1_id)} />
                             <div className="w-10 text-center font-black text-lg shrink-0">
                               <span className={isConfirmed ? (team1Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score1 ?? "-"}</span>
                             </div>
@@ -376,7 +408,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
                           {/* TEAM 2 */}
                           <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team2Wins ? 'opacity-40' : ''}`}>
-                            <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && round === 2} />
+                            <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && round === 2} isDu={myAllTeamIds.includes(m.team2_id)} />
                             <div className="w-10 text-center font-black text-lg shrink-0">
                               <span className={isConfirmed ? (team2Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score2 ?? "-"}</span>
                             </div>
@@ -406,9 +438,10 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
             <div className="space-y-4">
               {[activeUserMatch].map((m) => {
-                const myTeamId = teams.find((t) => t.user_id === user?.id)?.id;
-                const isHome = m.team1_id === myTeamId;
-                const isAway = m.team2_id === myTeamId;
+                // 🔥 UPDATE: Nutzt hier jetzt die Co-Captain fähigen Ids!
+                const isHome = myManageableTeamIds.includes(m.team1_id);
+                const isAway = myManageableTeamIds.includes(m.team2_id);
+                
                 const team1 = teamMap[m.team1_id];
                 const team2 = teamMap[m.team2_id];
                 const s1 = scores[m.id]?.s1 ?? (m.score1 !== null ? String(m.score1) : "");
@@ -476,11 +509,12 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                       </div>
                     ) : (
                       <>
-                        <TeamCard team={team1} isTBD={!team1} isDu={isHome} />
+                        {/* 🔥 UPDATE: isDu bekommt jetzt auch korrekt den Check */}
+                        <TeamCard team={team1} isTBD={!team1} isDu={myAllTeamIds.includes(m.team1_id)} />
                         <div className="flex flex-col items-center justify-center min-w-[120px]">
                           {actionUI}
                         </div>
-                        <TeamCard team={team2} isTBD={!team2} isDu={isAway} reverseOnMobile />
+                        <TeamCard team={team2} isTBD={!team2} isDu={myAllTeamIds.includes(m.team2_id)} reverseOnMobile />
                       </>
                     )}
                   </div>

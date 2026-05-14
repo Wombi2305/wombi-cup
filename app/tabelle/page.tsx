@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Fragment, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 
 // 🔥 HELPER: Holt das passende Bild
@@ -82,6 +82,10 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, 
 
 export default function TurnierTabelle() {
   const router = useRouter();
+  
+  // 🔥 NEU: URL-Parameter auslesen für die Shareable-Links
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
 
   // --- STATES ---
   const [loadingData, setLoadingData] = useState(true);
@@ -98,7 +102,8 @@ export default function TurnierTabelle() {
   const [teams, setTeams] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   
-  const [activeGroup, setActiveGroup] = useState<string>("ALL");
+  // 🔥 NEU: Nimmt standardmäßig den Wert aus der URL (z.B. ?group=A), sonst "ALL"
+  const [activeGroup, setActiveGroup] = useState<string>(searchParams.get("group") || "ALL");
   const [scores, setScores] = useState<any>({});
 
   const fetchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -375,6 +380,19 @@ export default function TurnierTabelle() {
     fetchData(true);
   };
 
+  // 🔥 NEU: Diese Funktion setzt den State UND passt die URL oben im Browser an
+  const handleGroupChange = (g: string) => {
+    setActiveGroup(g);
+    const params = new URLSearchParams(searchParams.toString());
+    if (g === "ALL") {
+      params.delete("group");
+    } else {
+      params.set("group", g);
+    }
+    // Verändert die URL ohne die Seite neu zu laden
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
   const modalMatches = userMatches.filter(m => m.round === activeRound);
 
   return (
@@ -411,14 +429,14 @@ export default function TurnierTabelle() {
                 </button>
               ))}
               
-              <button onClick={() => setActiveGroup("ALL")} className={activeGroup === "ALL" ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md ml-2" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5 ml-2"}>Alle Gruppen</button>
+              {/* 🔥 NEU: Buttons nutzen jetzt die handleGroupChange Funktion */}
+              <button onClick={() => handleGroupChange("ALL")} className={activeGroup === "ALL" ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md ml-2" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5 ml-2"}>Alle Gruppen</button>
               {Object.keys(groups).map((g) => (
-                <button key={g} onClick={() => setActiveGroup(g)} className={activeGroup === g ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5"}>Gruppe {g}</button>
+                <button key={g} onClick={() => handleGroupChange(g)} className={activeGroup === g ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5"}>Gruppe {g}</button>
               ))}
             </div>
           </div>
 
-          {/* 🔥 HIER IST DER FIX: items-start verhindert, dass die Boxen sich in der Höhe aufspannen */}
           <div className="grid gap-6 lg:grid-cols-2 items-start">
             {Object.keys(groups).filter((g) => activeGroup === "ALL" || g === activeGroup).map((groupName) => {
               const table = currentTables[groupName] || [];
@@ -558,7 +576,6 @@ export default function TurnierTabelle() {
                     </div>
                   );
                 } else if (m.status === "reported") {
-                  // Wenn es eingetragen wurde und du Auswärts bist (oder beide Teams managst), darfst du bestätigen
                   if (isAway) {
                     actionUI = (
                       <div className="flex flex-col items-center gap-2 w-full">
@@ -578,8 +595,6 @@ export default function TurnierTabelle() {
                     );
                   }
                 } else { 
-                  // Status == null (Niemand hat was eingetragen)
-                  // Wenn du Heim bist (oder beide), darfst du eintragen
                   if (isHome) {
                     actionUI = (
                       <div className="flex flex-col items-center gap-3 w-full">
