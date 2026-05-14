@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Fragment, useMemo, useRef } from "react";
+import { useEffect, useState, Fragment, useMemo, useRef, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -80,10 +80,11 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, 
   );
 };
 
-export default function TurnierTabelle() {
+// 1. Die Hauptlogik in eine Content-Komponente ausgelagert
+function TurnierTabelleContent() {
   const router = useRouter();
   
-  // 🔥 NEU: URL-Parameter auslesen für die Shareable-Links
+  // 🔥 URL-Parameter auslesen für die Shareable-Links
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
@@ -102,7 +103,6 @@ export default function TurnierTabelle() {
   const [teams, setTeams] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   
-  // 🔥 NEU: Nimmt standardmäßig den Wert aus der URL (z.B. ?group=A), sonst "ALL"
   const [activeGroup, setActiveGroup] = useState<string>(searchParams.get("group") || "ALL");
   const [scores, setScores] = useState<any>({});
 
@@ -380,7 +380,7 @@ export default function TurnierTabelle() {
     fetchData(true);
   };
 
-  // 🔥 NEU: Diese Funktion setzt den State UND passt die URL oben im Browser an
+  // Diese Funktion setzt den State UND passt die URL oben im Browser an
   const handleGroupChange = (g: string) => {
     setActiveGroup(g);
     const params = new URLSearchParams(searchParams.toString());
@@ -418,7 +418,7 @@ export default function TurnierTabelle() {
             </div>
 
             <div className="flex gap-2 flex-wrap items-center">
-              {/* 🔥 MULTI-BUTTON LOGIK FÜR MEHRERE TEAMS / SPIELTAGE 🔥 */}
+              {/* MULTI-BUTTON LOGIK FÜR MEHRERE TEAMS / SPIELTAGE */}
               {actionableRounds.map(round => (
                 <button 
                   key={round}
@@ -429,7 +429,7 @@ export default function TurnierTabelle() {
                 </button>
               ))}
               
-              {/* 🔥 NEU: Buttons nutzen jetzt die handleGroupChange Funktion */}
+              {/* Buttons nutzen jetzt die handleGroupChange Funktion */}
               <button onClick={() => handleGroupChange("ALL")} className={activeGroup === "ALL" ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md ml-2" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5 ml-2"}>Alle Gruppen</button>
               {Object.keys(groups).map((g) => (
                 <button key={g} onClick={() => handleGroupChange(g)} className={activeGroup === g ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5"}>Gruppe {g}</button>
@@ -443,7 +443,7 @@ export default function TurnierTabelle() {
               return (
                 <Fragment key={groupName}>
                   
-                  {/* 🔥 TABELLE */}
+                  {/* TABELLE */}
                   <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] overflow-hidden">
                     <div className="mb-3 border-b border-yellow-500/30 pb-2">
                       <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Gruppe {groupName}</span>
@@ -491,7 +491,7 @@ export default function TurnierTabelle() {
                     </div>
                   </div>
 
-                  {/* 🔥 SPIELPLAN */}
+                  {/* SPIELPLAN */}
                   {activeGroup !== "ALL" && (
                     <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex flex-col">
                       <div className="mb-4 border-b border-yellow-500/30 pb-2">
@@ -644,5 +644,14 @@ export default function TurnierTabelle() {
         </div>
       )}
     </main>
+  );
+}
+
+// 2. Exportierte Page mit Suspense Boundary umschlossen
+export default function TurnierTabelle() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center text-white">Lade Tabelle...</div>}>
+      <TurnierTabelleContent />
+    </Suspense>
   );
 }
