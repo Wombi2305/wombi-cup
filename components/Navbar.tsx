@@ -93,7 +93,7 @@ export default function Navbar() {
           </Link>
         </div>
 
-        {/* 2. MITTE: DESKTOP NAVIGATION - HIER SIND NUR NOCH DIE MAIN LINKS! */}
+        {/* 2. MITTE: DESKTOP NAVIGATION */}
         <div className="hidden lg:flex flex-auto items-center justify-center">
           <div className="flex items-center gap-1 bg-white/5 p-1.5 rounded-full border border-white/10 overflow-hidden">
             {MAIN_LINKS.map((link) => {
@@ -159,7 +159,6 @@ export default function Navbar() {
             ))}
           </div>
 
-          {/* User Dashboard nur im Mobile-Menü sichtbar */}
           {user && (
             <>
               <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent my-2" />

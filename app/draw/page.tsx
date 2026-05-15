@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image"; // 🔥 NEU IMPORTIERT
 
 const shuffleGroups = (groups: string[]) => {
   return [...groups].sort(() => Math.random() - 0.5);
@@ -33,7 +34,7 @@ const getTierStyles = (level: number) => {
   return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
 };
 
-// 🔥 DIE UNIVERSELLE TEAM-CARD 🔥
+// 🔥 DIE UNIVERSELLE TEAM-CARD (Optimiert mit next/image) 🔥
 const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, isWinner = false }: { team?: any, isDu?: boolean, reverseOnMobile?: boolean, isTBD?: boolean, isWinner?: boolean }) => {
   if (!team || isTBD) {
     return (
@@ -59,18 +60,31 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, 
   return (
     <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm font-bold flex-1 basis-0 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
       {banner && banner !== 'default' && (
-        <img 
+        <Image 
           src={`/rewards/banner_${banner}.png`} 
-          alt="" 
-          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none"
-          onError={(e) => e.currentTarget.style.display = 'none'} 
+          alt="Banner" 
+          fill
+          sizes="(max-width: 768px) 100vw, 300px"
+          className="absolute inset-0 object-cover object-center scale-[1.05] pointer-events-none"
         />
       )}
       <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
         {team.logo_url ? (
-          <img src={team.logo_url} loading="lazy" decoding="async" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" alt="Logo" />
+          <Image 
+            src={team.logo_url} 
+            alt="Logo" 
+            width={32} 
+            height={32} 
+            className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
+          />
         ) : (
-          <img src={getTierImage(team.level)} loading="lazy" decoding="async" className="w-8 h-8 object-contain shrink-0" alt="Rank" />
+          <Image 
+            src={getTierImage(team.level)} 
+            alt="Rank" 
+            width={32} 
+            height={32} 
+            className="w-8 h-8 object-contain shrink-0" 
+          />
         )}
         <span className={`whitespace-nowrap truncate tracking-tight transition-colors duration-500 ${textColor}`}>
           {team.name || team.teamname} 
@@ -183,12 +197,22 @@ export default function DrawPage() {
 
     fetchTournaments();
 
+    // 🔥 OPTIMIERUNG: Debounce für Realtime (verhindert massive Lags bei Registrierungen)
+    let timeoutId: NodeJS.Timeout;
+    const handleUpdate = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fetchTournaments(), 1000);
+    };
+
     const channel = supabase.channel("draw-tournaments")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, () => fetchTournaments())
-      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_registrations" }, () => fetchTournaments())
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournaments" }, handleUpdate)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_registrations" }, handleUpdate)
       .subscribe();
       
-    return () => { supabase.removeChannel(channel); };
+    return () => { 
+      clearTimeout(timeoutId);
+      supabase.removeChannel(channel); 
+    };
   }, [authorized]);
 
   useEffect(() => {
@@ -216,7 +240,6 @@ export default function DrawPage() {
   const fetchTeams = async () => {
     if (!selectedTournament) return;
     
-    // 🔥 NEU: Wir laden jetzt ALLE kosmetischen Daten mit runter!
     const { data } = await supabase
       .from("tournament_registrations")
       .select(`
@@ -435,7 +458,7 @@ export default function DrawPage() {
               />
             </div>
 
-            {/* 🔥 BIG REVEAL CARD 🔥 */}
+            {/* 🔥 BIG REVEAL CARD (Optimiert mit next/image) 🔥 */}
             {drawIndex < shuffled.length && (
               <div className="min-h-[6rem] md:min-h-[8rem] flex items-center justify-center mb-10 w-full px-2">
                 {revealedTeam ? (
@@ -450,13 +473,13 @@ export default function DrawPage() {
                     return (
                       <div className={`relative overflow-hidden flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] px-6 md:px-10 py-4 rounded-2xl font-bold text-3xl md:text-4xl animate-fadeIn ${bdr} ${bbg}`}>
                          {bnr && bnr !== 'default' && (
-                            <img src={`/rewards/banner_${bnr}.png`} alt="" className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" onError={(e) => e.currentTarget.style.display = 'none'} />
+                           <Image src={`/rewards/banner_${bnr}.png`} alt="Banner" fill className="absolute inset-0 object-cover object-center scale-[1.05] pointer-events-none" />
                          )}
                          <div className="relative z-10 flex items-center justify-center gap-4 md:gap-6 w-full">
                             {t.logo_url ? (
-                              <img src={t.logo_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-xl" alt="Logo" />
+                              <Image src={t.logo_url} width={80} height={80} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-xl" alt="Logo" />
                             ) : (
-                              <img src={getTierImage(t.level)} className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-xl shrink-0" alt="Rank" />
+                              <Image src={getTierImage(t.level)} width={80} height={80} className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-xl shrink-0" alt="Rank" />
                             )}
                             <span className={`whitespace-nowrap tracking-tight truncate ${txt}`}>{t.teamname}</span>
                          </div>
@@ -475,13 +498,13 @@ export default function DrawPage() {
                     return (
                       <div className={`relative overflow-hidden flex items-center justify-center gap-4 md:gap-6 w-full max-w-[500px] md:max-w-[600px] px-6 md:px-10 py-4 rounded-2xl font-bold text-3xl md:text-4xl animate-pulse opacity-90 ${bdr} ${bbg}`}>
                          {bnr && bnr !== 'default' && (
-                            <img src={`/rewards/banner_${bnr}.png`} alt="" className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" onError={(e) => e.currentTarget.style.display = 'none'} />
+                           <Image src={`/rewards/banner_${bnr}.png`} alt="Banner" fill className="absolute inset-0 object-cover object-center scale-[1.05] pointer-events-none" />
                          )}
                          <div className="relative z-10 flex items-center justify-center gap-4 md:gap-6 w-full">
                             {t.logo_url ? (
-                              <img src={t.logo_url} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-lg" alt="Logo" />
+                              <Image src={t.logo_url} width={80} height={80} className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-lg" alt="Logo" />
                             ) : (
-                              <img src={getTierImage(t.level)} className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg shrink-0" alt="Rank" />
+                              <Image src={getTierImage(t.level)} width={80} height={80} className="w-16 h-16 md:w-20 md:h-20 object-contain drop-shadow-lg shrink-0" alt="Rank" />
                             )}
                             <span className={`whitespace-nowrap tracking-tight truncate ${txt}`}>{t.teamname}</span>
                          </div>

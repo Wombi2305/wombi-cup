@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase-server"; // 🔥 WICHTIG
+import { createClient } from "@/lib/supabase-server";
 
 export async function GET(req: Request) {
   try {
@@ -48,14 +48,14 @@ export async function GET(req: Request) {
       role = "freeagent";
     }
 
-    // 🔥 SERVER CLIENT (FIX)
+    // 🔥 SERVER CLIENT
     const supabase = await createClient();
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    // 🔥 DB updaten (Jetzt ohne "&& role", damit das Update IMMER feuert)
+    // 🔥 DB updaten
     if (user) {
       await supabase.from("profiles").upsert({
         id: user.id,

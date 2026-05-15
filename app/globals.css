@@ -6,8 +6,6 @@
   --foreground: #ededed;
 }
 
-/* ❌ KEIN @theme mehr! */
-
 /* Optional Light Mode */
 @media (prefers-color-scheme: light) {
   :root {

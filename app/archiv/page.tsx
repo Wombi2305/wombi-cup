@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, Fragment, useMemo } from "react";
+import { useEffect, useState, Fragment, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image"; // 🔥 NEU IMPORTIERT
 
 // 🔥 HELPER: Holt das passende Bild
 const getTierImage = (level: number) => {
@@ -51,6 +52,9 @@ export default function ArchivTabelle() {
   const [activeGroup, setActiveGroup] = useState<string>("ALL");
   const [tournamentStats, setTournamentStats] = useState<any>({});
   const [scores, setScores] = useState<any>({});
+
+  // 🔥 Timeout Referenz für Debouncing
+  const fetchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentTournamentData = tournaments.find((t) => t.id === selectedTournament) || {};
   const tournamentStyle = {
@@ -150,13 +154,23 @@ export default function ArchivTabelle() {
     fetchTournaments();
   }, []);
 
+  // 🔥 OPTIMIERUNG: Debounce für Realtime
   useEffect(() => {
     if (!selectedTournament) return;
     fetchData();
     const channel = supabase.channel("realtime-tabelle")
-      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => fetchData(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => {
+        if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+        fetchTimeout.current = setTimeout(() => {
+          fetchData(true);
+        }, 1500);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      
+    return () => { 
+      supabase.removeChannel(channel); 
+      if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+    };
   }, [selectedTournament, user]);
 
   const fetchTournaments = async () => {
@@ -327,10 +341,16 @@ export default function ArchivTabelle() {
                               <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-lg md:text-xl" : "text-yellow-400 text-base md:text-xl"}`}>{i + 1}</span>
                               <span className="text-white/90 font-bold text-sm">{team.pkt}</span>
                               
-                              {/* 🔥 TEAM BADGE IN TABELLE */}
+                              {/* 🔥 TEAM BADGE IN TABELLE (Mit next/image) */}
                               <div className="col-span-5 flex items-center justify-start pr-2">
                                   <div className={`flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold w-full ${getTierColors(team.level)}`}>
-                                    <img src={getTierImage(team.level)} alt="Rank" className="w-8 h-8 object-contain shrink-0" />
+                                    <Image 
+                                      src={getTierImage(team.level)} 
+                                      alt="Rank" 
+                                      width={32} 
+                                      height={32} 
+                                      className="w-8 h-8 object-contain shrink-0" 
+                                    />
                                     <span className="whitespace-nowrap">{team.name}</span>
                                   </div>
                               </div>
@@ -361,7 +381,7 @@ export default function ArchivTabelle() {
                               {games.map((m: any) => (
                                 <div key={m.id} className="flex justify-between items-center text-xs bg-white/5 hover:bg-white/10 transition px-2 py-2 rounded-lg border border-white/5">
                                   
-                                  {/* 🔥 TEAM 1 IM SPIELPLAN (Ohne Rahmen und Icon) */}
+                                  {/* 🔥 TEAM 1 IM SPIELPLAN */}
                                   <div className="w-[40%] text-left truncate text-xs font-bold text-white/90">
                                     {getTeamName(m.team1_id)}
                                   </div>
@@ -370,7 +390,7 @@ export default function ArchivTabelle() {
                                     {m.score1 != null ? `${m.score1} : ${m.score2}` : "- : -"}
                                   </span>
 
-                                  {/* 🔥 TEAM 2 IM SPIELPLAN (Ohne Rahmen und Icon) */}
+                                  {/* 🔥 TEAM 2 IM SPIELPLAN */}
                                   <div className="w-[40%] text-right truncate text-xs font-bold text-white/90">
                                     {getTeamName(m.team2_id)}
                                   </div>
@@ -424,9 +444,9 @@ export default function ArchivTabelle() {
                       </div>
                     ) : (
                       <>
-                        {/* 🔥 TEAM 1 BADGE IM MODAL */}
+                        {/* 🔥 TEAM 1 BADGE IM MODAL (Mit next/image) */}
                         <div className={`flex items-center justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team1_id]?.level)}`}>
-                          <img src={getTierImage(teamMap[m.team1_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
+                          <Image src={getTierImage(teamMap[m.team1_id]?.level)} width={24} height={24} className="w-6 h-6 shrink-0" alt="" />
                           <span className="truncate tracking-tight">{getTeamName(m.team1_id)} {isHome && "(Du)"}</span>
                         </div>
 
@@ -470,9 +490,9 @@ export default function ArchivTabelle() {
                           ) : null}
                         </div>
 
-                        {/* 🔥 TEAM 2 BADGE IM MODAL */}
+                        {/* 🔥 TEAM 2 BADGE IM MODAL (Mit next/image) */}
                         <div className={`flex items-center justify-end flex-row-reverse sm:flex-row sm:justify-start border rounded-lg px-3 py-2 gap-2 text-sm font-bold flex-1 overflow-hidden ${getTierColors(teamMap[m.team2_id]?.level)}`}>
-                          <img src={getTierImage(teamMap[m.team2_id]?.level)} className="w-6 h-6 shrink-0" alt="" />
+                          <Image src={getTierImage(teamMap[m.team2_id]?.level)} width={24} height={24} className="w-6 h-6 shrink-0" alt="" />
                           <span className="truncate tracking-tight">{getTeamName(m.team2_id)} {isAway && "(Du)"}</span>
                         </div>
                         

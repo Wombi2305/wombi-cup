@@ -23,28 +23,14 @@ export default function DiscordLogin() {
       if (discordId) {
         localStorage.setItem("discord_user_id", discordId);
 
-        // 🚀 NEU: DATEN DIREKT VON DER API HOLEN
-        const res = await fetch(`/api/discord/member?userId=${discordId}`);
-        const discordData = await res.json();
-
-        console.log("DISCORD DATA:", discordData);
-
-        // 👉 NUR NOCH discordData.roles NUTZEN
-        const roles = discordData?.roles || [];
-        console.log("ROLES FROM API:", roles);
-
-        // Check gegen die spezifische Orga-ID
-        const isAdmin = roles.some((r: any) => String(r) === "1492478735444873398");
-        console.log("IS ADMIN:", isAdmin);
-
-        // Profile Upsert mit den API-Daten
-        const { error } = await supabase.from("profiles").upsert({
-          id: data.user.id,
-          discord_id: discordId,
-          is_admin: isAdmin,
-        });
-
-        if (error) console.log("PROFILE UPSERT ERROR:", error);
+        try {
+          // 🚀 DATEN DIREKT VON DER API HOLEN
+          // Hinweis: Die API Route kümmert sich serverseitig bereits um den Upsert in die profiles Tabelle!
+          // Wir rufen sie hier nur auf, um den Vorgang nach dem Login einmal anzustoßen.
+          await fetch(`/api/discord/member?userId=${discordId}`);
+        } catch (err) {
+          console.error("Fehler beim Abrufen der Discord-Daten:", err);
+        }
       }
 
       setLoading(false);
@@ -77,10 +63,8 @@ export default function DiscordLogin() {
     if (error) console.error("Login Error:", error);
   };
 
-  // 🔥 FIX: Solange die Daten noch geladen werden, zeige gar nichts an.
-  // Das verhindert den "Flash" des Login-Buttons.
+  // 🔥 Solange die Daten noch geladen werden, zeige gar nichts an.
   if (loading) return null;
-
   if (user) return null;
 
   return (

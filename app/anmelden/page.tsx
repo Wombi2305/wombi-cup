@@ -200,7 +200,6 @@ export default function Anmelden() {
         </h1>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 pb-10">
-          {/* 🔥 HIER IST DER NEUE FILTER EINGEBAUT */}
           {tournaments.filter((t: any) => t.status !== "finished" && !t.archived).map((t: any) => {
             const registrations = t.tournament_registrations || [];
             const approvedCount = registrations.filter((r: any) => r.status === "approved").length;

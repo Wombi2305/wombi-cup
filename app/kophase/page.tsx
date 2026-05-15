@@ -3,12 +3,11 @@
 // 🔥 DIESE ZEILE DEAKTIVIERT DAS VERCEL CACHING FÜR DIESE SEITE 🔥
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import KoPhase from "@/components/KoPhase";
 import { useSearchParams } from "next/navigation";
 
-// Die eigentliche Logik haben wir in eine Unter-Komponente ausgelagert
 function KoPhaseContent() {
   const searchParams = useSearchParams(); 
   
@@ -19,6 +18,9 @@ function KoPhaseContent() {
   const [teams, setTeams] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
 
+  // 🔥 Timeout Referenz für Debouncing
+  const fetchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // 1. User abrufen
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
@@ -27,23 +29,21 @@ function KoPhaseContent() {
   // 2. Turniere laden & URL-Parameter prüfen
   useEffect(() => {
     const fetchTournaments = async () => {
-      // 🔥 KORREKTUR: Hier filtern wir nach ko_status "active", passend zum Admin-Panel!
       const { data } = await supabase
         .from("tournaments")
         .select("*")
         .eq("status", "active")
-        .eq("ko_status", "active"); // <-- Hier war vorher der Fehler
+        .eq("ko_status", "active"); 
       
       if (data && data.length > 0) {
         setTournaments(data);
         
-        // Hier greifen wir die ID sicher über Next.js ab
         const urlId = searchParams.get("tournamentId");
         
         if (urlId && data.some(t => t.id === Number(urlId))) {
-          setSelectedTournament(Number(urlId)); // Turnier aus der URL setzen
+          setSelectedTournament(Number(urlId)); 
         } else {
-          setSelectedTournament(data[0].id); // Fallback: Erstes Turnier
+          setSelectedTournament(data[0].id); 
         }
       }
       setLoading(false);
@@ -55,7 +55,6 @@ function KoPhaseContent() {
   useEffect(() => {
     if (!selectedTournament) return;
     const fetchData = async () => {
-      // Wir holen die Teams über die Verknüpfungstabelle
       const { data: regData } = await supabase
         .from("tournament_registrations")
         .select("teams(*)")
@@ -67,19 +66,29 @@ function KoPhaseContent() {
         .eq("tournament_id", selectedTournament);
         
       if (regData) {
-        // Teams entpacken, damit die Child-Komponente nichts von dem Join merkt
         const extractedTeams = regData.map((r: any) => r.teams).filter(Boolean);
         setTeams(extractedTeams);
       }
       
       if (m) setMatches(m);
     };
+    
     fetchData();
 
+    // 🔥 OPTIMIERUNG: Debounce für Realtime
     const channel = supabase.channel("kophase-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => fetchData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => {
+        if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+        fetchTimeout.current = setTimeout(() => {
+          fetchData();
+        }, 1500); // Wartet 1.5 Sekunden
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      
+    return () => { 
+      supabase.removeChannel(channel); 
+      if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
+    };
   }, [selectedTournament]);
 
   const currentTournament = tournaments.find(t => t.id === selectedTournament);
@@ -88,7 +97,6 @@ function KoPhaseContent() {
     <main className="px-4 md:px-6 pt-6 pb-12 text-white font-sans w-full max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold text-yellow-400 mb-6 uppercase tracking-widest italic">K.O. Phase</h1>
 
-      {/* Button-Leiste für Turniere */}
       {tournaments.length > 1 && (
         <div className="flex flex-wrap gap-2 mb-8">
           {tournaments.map((t) => (
@@ -119,7 +127,6 @@ function KoPhaseContent() {
   );
 }
 
-// Next.js verlangt, dass alles, was useSearchParams nutzt, in eine <Suspense> Klammer kommt
 export default function KoPhasePage() {
   return (
     <Suspense fallback={<div className="h-screen flex items-center justify-center text-white">Lade K.O. Phase...</div>}>

@@ -3,6 +3,7 @@
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image"; // 🔥 NEU IMPORTIERT
 
 export default function AccountMenu() {
   const [user, setUser] = useState<any>(null);
@@ -52,6 +53,7 @@ export default function AccountMenu() {
 
   const isAdmin = userRoles.includes("1492478735444873398");
   const isStreamer = userRoles.includes("1493976124173062195");
+  const avatarUrl = user.user_metadata?.avatar_url || "/default-avatar.png";
 
   return (
     <div className="relative w-full md:w-auto" ref={menuRef}>
@@ -59,13 +61,18 @@ export default function AccountMenu() {
         onClick={() => setOpen(!open)}
         className="flex items-center justify-center md:justify-start gap-3 md:gap-2 cursor-pointer group w-full px-4 py-2 md:p-0 bg-white/5 md:bg-transparent rounded-lg md:rounded-none hover:bg-white/10 md:hover:bg-transparent transition-colors"
       >
-        <img src={user.user_metadata?.avatar_url} className="w-8 h-8 rounded-full border border-yellow-500/10" alt="Avatar" />
+        <Image 
+          src={avatarUrl} 
+          alt="Avatar" 
+          width={32} 
+          height={32} 
+          className="w-8 h-8 rounded-full border border-yellow-500/10 object-cover" 
+        />
         <span className="text-white/90 font-medium group-hover:text-yellow-400">{nickname || user.user_metadata?.name}</span>
       </div>
 
       {open && (
         <div className="md:absolute md:right-0 md:top-full mt-2 md:mt-4 w-full md:w-56 bg-black/95 backdrop-blur-xl border border-yellow-500/10 rounded-xl shadow-2xl overflow-hidden py-1 z-[100]">
-          {/* Diese Links erscheinen NUR auf dem PC (md:block) */}
           <Link href="/profil" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
             Profil
           </Link>

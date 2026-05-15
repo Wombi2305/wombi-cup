@@ -4,6 +4,7 @@ import { useEffect, useState, Fragment, useMemo, useRef, Suspense } from "react"
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 // 🔥 HELPER: Holt das passende Bild
 const getTierImage = (level: number) => {
@@ -50,59 +51,63 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, 
   return (
     <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
       {banner && banner !== 'default' && (
-        <img 
+        <Image 
           src={`/rewards/banner_${banner}.png`} 
-          alt="" 
-          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none"
-          onError={(e) => e.currentTarget.style.display = 'none'} 
+          alt="Banner" 
+          fill
+          sizes="(max-width: 768px) 100vw, 300px"
+          className="absolute inset-0 object-cover object-center scale-[1.05] pointer-events-none"
         />
       )}
       <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
         {team.logo_url ? (
-          <img src={team.logo_url} loading="lazy" decoding="async" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" alt="Logo" />
+          <Image 
+            src={team.logo_url} 
+            alt="Logo" 
+            width={32} 
+            height={32} 
+            className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
+          />
         ) : (
-          <img src={getTierImage(team.level)} loading="lazy" decoding="async" className="w-8 h-8 object-contain shrink-0" alt="Rank" />
+          <Image 
+            src={getTierImage(team.level)} 
+            alt="Rank" 
+            width={32} 
+            height={32} 
+            className="w-8 h-8 object-contain shrink-0" 
+          />
         )}
         <span
-        className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none tracking-tight transition-colors duration-500 text-[clamp(10px,1vw,16px)] ${textColor}`}
-        style={{ fontSize: "clamp(10px, 1vw, 16px)" }}
-      >
-        {team.name || team.teamname}
-
-       {isDu && (
-         <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
-           (Du)
-         </span>
-        )}
-      </span>
+          className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none tracking-tight transition-colors duration-500 text-[clamp(10px,1vw,16px)] ${textColor}`}
+          style={{ fontSize: "clamp(10px, 1vw, 16px)" }}
+        >
+          {team.name || team.teamname}
+         {isDu && (
+           <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
+             (Du)
+           </span>
+          )}
+        </span>
       </div>
     </div>
   );
 };
 
-// 1. Die Hauptlogik in eine Content-Komponente ausgelagert
 function TurnierTabelleContent() {
   const router = useRouter();
-  
-  // 🔥 URL-Parameter auslesen für die Shareable-Links
   const searchParams = useSearchParams();
   const pathname = usePathname();
 
-  // --- STATES ---
   const [loadingData, setLoadingData] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [myTeamRoles, setMyTeamRoles] = useState<any[]>([]);
-  
   const [activeRound, setActiveRound] = useState<number | null>(null);
-
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [selectedTournament, setSelectedTournament] = useState<number | null>(null);
-
   const [groups, setGroups] = useState<any>({});
   const [teams, setTeams] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
-  
   const [activeGroup, setActiveGroup] = useState<string>(searchParams.get("group") || "ALL");
   const [scores, setScores] = useState<any>({});
 
@@ -145,27 +150,42 @@ function TurnierTabelleContent() {
     );
   }, [matches, myManageableTeamIds, user]);
 
+  // 🔥 AKTUALISIERTE LOGIK: Prüft den Fortschritt der gesamten Gruppe
   const actionableRounds = useMemo(() => {
-    if (!userMatches || userMatches.length === 0) return [];
-    
-    const roundsToShow = new Set<number>();
+    if (!matches || matches.length === 0 || !userMatches || userMatches.length === 0) return [];
 
-    myManageableTeamIds.forEach(teamId => {
-      const matchesForThisTeam = userMatches.filter(m => m.team1_id === teamId || m.team2_id === teamId);
-      
-      const unconfirmed = matchesForThisTeam.filter(m => m.status !== "confirmed");
-      
-      if (unconfirmed.length > 0) {
-        const lowestRound = Math.min(...unconfirmed.map(m => m.round));
-        roundsToShow.add(lowestRound);
-      } else if (matchesForThisTeam.length > 0) {
-        const highestRound = Math.max(...matchesForThisTeam.map(m => m.round));
-        roundsToShow.add(highestRound);
-      }
-    });
+    // 1. Alle Gruppen finden, in denen der User Teams hat
+    const userGroups = Array.from(new Set(userMatches.map(m => m.group_name)));
 
-    return Array.from(roundsToShow).sort((a,b) => a - b);
-  }, [userMatches, myManageableTeamIds]);
+    // 2. Alle Matches dieser Gruppen holen
+    const relevantGroupMatches = matches.filter(m => 
+      m.match_type !== "ko" && userGroups.includes(m.group_name)
+    );
+
+    // 3. Chronologisch sortieren
+    const sortedMatches = [...relevantGroupMatches].sort((a, b) => a.round - b.round);
+
+    // 4. Erstes unbestätigtes Spiel in der Gruppe finden
+    const firstUnconfirmedGlobal = sortedMatches.find(m => m.status !== "confirmed");
+
+    if (firstUnconfirmedGlobal) {
+        // Falls dieses unbestätigte Spiel EINES MEINER Teams betrifft, zeige diesen Spieltag
+        // ODER: Wenn ich in diesem Spieltag noch etwas zu tun habe
+        const myOpenMatchInThisRound = userMatches.find(m => m.round === firstUnconfirmedGlobal.round && m.status !== "confirmed");
+        
+        if (myOpenMatchInThisRound) {
+            return [firstUnconfirmedGlobal.round];
+        } else {
+            // Wenn mein Spiel in dieser Runde schon fertig ist, aber andere noch fehlen:
+            // Wir zeigen die nächste Runde an, in der ICH wieder aktiv werden muss,
+            // aber blockieren den Fortschritt, falls du das willst. 
+            // Hier: Wir zeigen erst die nächste MEINER Runden, wenn die globale Runde davor abgeschlossen ist.
+            return []; 
+        }
+    }
+
+    return [];
+  }, [matches, userMatches]);
 
   const matchesByGroup = useMemo(() => {
     const map: any = {};
@@ -193,11 +213,9 @@ function TurnierTabelleContent() {
       const t1 = table[m.team1_id];
       const t2 = table[m.team2_id];
       if (!t1 || !t2) return;
-
       t1.sp++; t2.sp++;
       t1.tore += m.score1; t1.gegentore += m.score2;
       t2.tore += m.score2; t2.gegentore += m.score1;
-
       if (m.score1 > m.score2) { t1.g++; t2.v++; t1.pkt += 3; }
       else if (m.score1 < m.score2) { t2.g++; t1.v++; t2.pkt += 3; }
       else { t1.u++; t2.u++; t1.pkt++; t2.pkt++; }
@@ -236,10 +254,7 @@ function TurnierTabelleContent() {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       setUser(currentUser);
       if (currentUser) {
-        const { data: roles } = await supabase
-          .from("team_members")
-          .select("team_id, role")
-          .eq("user_id", currentUser.id);
+        const { data: roles } = await supabase.from("team_members").select("team_id, role").eq("user_id", currentUser.id);
         setMyTeamRoles(roles || []);
       }
     };
@@ -253,18 +268,13 @@ function TurnierTabelleContent() {
 
   useEffect(() => {
     if (!selectedTournament) return;
-    
     fetchData();
-    
     const channel = supabase.channel("realtime-tabelle")
       .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, () => {
         if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
-        fetchTimeout.current = setTimeout(() => {
-          fetchData(true);
-        }, 2000);
+        fetchTimeout.current = setTimeout(() => fetchData(true), 2000);
       })
       .subscribe();
-      
     return () => { 
       supabase.removeChannel(channel); 
       if (fetchTimeout.current) clearTimeout(fetchTimeout.current);
@@ -273,19 +283,11 @@ function TurnierTabelleContent() {
 
   const fetchTournaments = async () => {
     setLoadingData(true);
-    
-    const { data } = await supabase
-      .from("tournaments")
-      .select("*")
-      .eq("archived", false)
-      .eq("draw_finished", true);
-    
+    const { data } = await supabase.from("tournaments").select("*").eq("archived", false).eq("draw_finished", true);
     if (!data || data.length === 0) { 
-      setTournaments([]); setSelectedTournament(null); setGroups({}); setTeams([]); setMatches([]);
-      setIsReady(true); setLoadingData(false); 
+      setTournaments([]); setSelectedTournament(null); setIsReady(true); setLoadingData(false); 
       return; 
     }
-    
     setTournaments(data);
     setSelectedTournament(data[0].id);
     setLoadingData(false);
@@ -293,19 +295,15 @@ function TurnierTabelleContent() {
 
   const fetchData = async (isBackground = false) => {
     if (!isBackground && !isReady) setLoadingData(true);
-    
     const { data: regData } = await supabase.from("tournament_registrations").select("teams(*)").eq("tournament_id", selectedTournament).eq("status", "approved"); 
     const { data: m } = await supabase.from("matches").select("*").eq("tournament_id", selectedTournament);
     const { data: g } = await supabase.from("group_assignments").select("*").eq("tournament_id", selectedTournament);
-    
     let extractedTeams: any[] = [];
     if (regData) {
       extractedTeams = regData.map((r: any) => r.teams).filter(Boolean);
       setTeams(extractedTeams);
     }
-    
     if (m) setMatches(m);
-    
     if (g && extractedTeams.length > 0) {
       const grouped: any = {};
       g.forEach((row) => {
@@ -314,82 +312,37 @@ function TurnierTabelleContent() {
         if (team) grouped[row.group_name].push(team);
       });
       setGroups(grouped);
-    } else {
-      setGroups({});
     }
-    
     setIsReady(true); setLoadingData(false);
   };
 
   const getTeamName = (id: number) => teamMap[id]?.teamname || "Team";
-
   const updateScoreInput = (matchId: number, key: string, value: string) => {
     setScores((prev: any) => ({ ...prev, [matchId]: { ...(prev[matchId] || {}), [key]: value.replace(/[^0-9]/g, "") } }));
   };
 
   const handleReport = async (matchId: number, s1: number, s2: number) => {
     const { error } = await supabase.from("matches").update({ score1: s1, score2: s2, status: "reported", reported_by: user.id }).eq("id", matchId);
-    if (error) {
-      alert("❌ Fehler beim Melden des Ergebnisses:\n\n" + error.message);
-      return;
-    }
+    if (error) return alert("❌ Fehler: " + error.message);
     fetchData(true);
   };
 
   const handleConfirm = async (matchId: number) => {
     const { error: matchError } = await supabase.from("matches").update({ status: "confirmed", confirmed_by: user.id }).eq("id", matchId);
-
-    if (matchError) {
-      alert("❌ Fehler beim Bestätigen:\n\n" + matchError.message);
-      return; 
-    }
-
-    try {
-      const match = matches.find((m) => m.id === matchId);
-      if (match && match.score1 !== null && match.score2 !== null) {
-        const team1Wins = match.score1 > match.score2;
-        const team2Wins = match.score2 > match.score1;
-        const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
-        
-        if (winningTeamId) {
-          const { data: winnerData } = await supabase.from('teams').select('active_xp_boosts, bonus_xp').eq('id', winningTeamId).single();
-            
-          if (winnerData && winnerData.active_xp_boosts > 0) {
-            const goalsScored = team1Wins ? match.score1 : match.score2;
-            const extraXp = 50 + (goalsScored * 10); 
-            await supabase.from('teams').update({
-              active_xp_boosts: winnerData.active_xp_boosts - 1,
-              bonus_xp: (winnerData.bonus_xp || 0) + extraXp
-            }).eq('id', winningTeamId);
-          }
-        }
-      }
-    } catch (xpError) {
-      console.error("Fehler bei der XP-Vergabe:", xpError);
-    }
-
+    if (matchError) return alert("❌ Fehler: " + matchError.message);
     fetchData(true);
   };
 
   const handleReject = async (matchId: number) => {
     const { error } = await supabase.from("matches").update({ score1: null, score2: null, status: "rejected", reported_by: null }).eq("id", matchId);
-    if (error) {
-      alert("❌ Fehler beim Ablehnen:\n\n" + error.message);
-      return;
-    }
+    if (error) return alert("❌ Fehler: " + error.message);
     fetchData(true);
   };
 
-  // Diese Funktion setzt den State UND passt die URL oben im Browser an
   const handleGroupChange = (g: string) => {
     setActiveGroup(g);
     const params = new URLSearchParams(searchParams.toString());
-    if (g === "ALL") {
-      params.delete("group");
-    } else {
-      params.set("group", g);
-    }
-    // Verändert die URL ohne die Seite neu zu laden
+    g === "ALL" ? params.delete("group") : params.set("group", g);
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -405,7 +358,7 @@ function TurnierTabelleContent() {
       {loadingData ? (
         <div className="text-white/60 text-center mt-20">⏳ Lade...</div>
       ) : tournaments.length === 0 ? (
-        <div className="text-white/60 text-center mt-20">Es gibt derzeit keine laufenden Turniere.</div>
+        <div className="text-white/60 text-center mt-20">Keine laufenden Turniere.</div>
       ) : (
         <>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -418,18 +371,11 @@ function TurnierTabelleContent() {
             </div>
 
             <div className="flex gap-2 flex-wrap items-center">
-              {/* MULTI-BUTTON LOGIK FÜR MEHRERE TEAMS / SPIELTAGE */}
               {actionableRounds.map(round => (
-                <button 
-                  key={round}
-                  onClick={() => setActiveRound(round)} 
-                  className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md hover:scale-105 transition-transform"
-                >
+                <button key={round} onClick={() => setActiveRound(round)} className="bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md hover:scale-105 transition-transform">
                   Spieltag {round} verwalten
                 </button>
               ))}
-              
-              {/* Buttons nutzen jetzt die handleGroupChange Funktion */}
               <button onClick={() => handleGroupChange("ALL")} className={activeGroup === "ALL" ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md ml-2" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5 ml-2"}>Alle Gruppen</button>
               {Object.keys(groups).map((g) => (
                 <button key={g} onClick={() => handleGroupChange(g)} className={activeGroup === g ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5"}>Gruppe {g}</button>
@@ -442,8 +388,6 @@ function TurnierTabelleContent() {
               const table = currentTables[groupName] || [];
               return (
                 <Fragment key={groupName}>
-                  
-                  {/* TABELLE */}
                   <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] overflow-hidden">
                     <div className="mb-3 border-b border-yellow-500/30 pb-2">
                       <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Gruppe {groupName}</span>
@@ -451,39 +395,17 @@ function TurnierTabelleContent() {
                     <div className="w-full overflow-x-auto pb-2">
                       <div className="min-w-[340px]">
                         <div className="grid grid-cols-12 text-[10px] md:text-xs uppercase text-gray-400 mb-2 px-1 text-center font-bold italic">
-                          <span>#</span>
-                          <span>Pkt</span>
-                          <span className="text-left col-span-5">Team</span>
-                          <span>Sp</span>
-                          <span>G</span>
-                          <span>U</span>
-                          <span>V</span>
-                          <span className="text-yellow-400">TG</span>
+                          <span>#</span><span>Pkt</span><span className="text-left col-span-5">Team</span><span>Sp</span><span>G</span><span>U</span><span>V</span><span className="text-yellow-400">TG</span>
                         </div>
                         {table.map((team: any, i: number) => {
                           const isTop = i < tournamentStyle.top_places;
                           const isBottom = i >= table.length - tournamentStyle.bottom_places;
                           return (
-                            <div 
-                              key={team.id} 
-                              style={{ 
-                                background: isTop ? tournamentStyle.color_top + "20" : isBottom ? tournamentStyle.color_bottom + "20" : tournamentStyle.color_middle + "20", 
-                                borderLeft: `4px solid ${isTop ? tournamentStyle.color_top : isBottom ? tournamentStyle.color_bottom : tournamentStyle.color_middle}` 
-                              }} 
-                              className="grid grid-cols-12 text-xs md:text-sm py-2 border-b border-white/5 items-center text-center transition-colors hover:bg-white/5"
-                            >
+                            <div key={team.id} style={{ background: isTop ? tournamentStyle.color_top + "20" : isBottom ? tournamentStyle.color_bottom + "20" : tournamentStyle.color_middle + "20", borderLeft: `4px solid ${isTop ? tournamentStyle.color_top : isBottom ? tournamentStyle.color_bottom : tournamentStyle.color_middle}` }} className="grid grid-cols-12 text-xs md:text-sm py-2 border-b border-white/5 items-center text-center transition-colors hover:bg-white/5">
                               <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-lg md:text-xl" : "text-yellow-400 text-base md:text-xl"}`}>{i + 1}</span>
                               <span className="text-white/90 font-bold text-sm">{team.pkt}</span>
-                              
-                              <div className="col-span-5 flex items-center justify-start pr-2">
-                                <TeamCard team={team} isDu={myAllTeamIds.includes(team.id)} />
-                              </div>
-                              
-                              <span>{team.sp}</span>
-                              <span className="text-green-400 font-bold">{team.g}</span>
-                              <span>{team.u}</span>
-                              <span>{team.v}</span>
-                              <span className="font-bold text-yellow-400 text-sm">{team.tore}:{team.gegentore}</span>
+                              <div className="col-span-5 flex items-center justify-start pr-2"><TeamCard team={team} isDu={myAllTeamIds.includes(team.id)} /></div>
+                              <span>{team.sp}</span><span className="text-green-400 font-bold">{team.g}</span><span>{team.u}</span><span>{team.v}</span><span className="font-bold text-yellow-400 text-sm">{team.tore}:{team.gegentore}</span>
                             </div>
                           );
                         })}
@@ -491,45 +413,23 @@ function TurnierTabelleContent() {
                     </div>
                   </div>
 
-                  {/* SPIELPLAN */}
                   {activeGroup !== "ALL" && (
                     <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] flex flex-col">
-                      <div className="mb-4 border-b border-yellow-500/30 pb-2">
-                        <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Spielplan Gruppe {groupName}</span>
-                      </div>
+                      <div className="mb-4 border-b border-yellow-500/30 pb-2"><span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Spielplan Gruppe {groupName}</span></div>
                       <div className="flex-1">
                         {Object.entries(groupedMatchesByGroupAndRound[groupName] || {}).map(([round, games]: any) => (
                           <div key={round} className="mb-5">
                             <div className="text-xs text-gray-400 mb-2 uppercase tracking-widest">Spieltag {round}</div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
                               {games.map((m: any) => {
-                                // HIGHLIGHT LOGIK
                                 const isTeam1Mine = myAllTeamIds.includes(m.team1_id);
                                 const isTeam2Mine = myAllTeamIds.includes(m.team2_id);
                                 const isMyMatch = isTeam1Mine || isTeam2Mine;
-
                                 return (
-                                  <div 
-                                    key={m.id} 
-                                    className={`flex justify-between items-center text-xs transition px-2 py-2 rounded-lg border ${
-                                      isMyMatch 
-                                        ? 'bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20' 
-                                        : 'bg-white/5 border-white/5 hover:bg-white/10'
-                                    }`}
-                                  >
-                                    
-                                    <div className={`w-[40%] text-left truncate text-xs font-bold ${isTeam1Mine ? 'text-yellow-400' : 'text-white/90'}`}>
-                                      {getTeamName(m.team1_id)}
-                                    </div>
-
-                                    <span className="w-[15%] mx-1 text-center text-yellow-400 font-bold bg-black/40 py-1 rounded whitespace-nowrap">
-                                      {m.score1 != null ? `${m.score1} : ${m.score2}` : "- : -"}
-                                    </span>
-
-                                    <div className={`w-[40%] text-right truncate text-xs font-bold ${isTeam2Mine ? 'text-yellow-400' : 'text-white/90'}`}>
-                                      {getTeamName(m.team2_id)}
-                                    </div>
-
+                                  <div key={m.id} className={`flex justify-between items-center text-xs transition px-2 py-2 rounded-lg border ${isMyMatch ? 'bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
+                                    <div className={`w-[40%] text-left truncate text-xs font-bold ${isTeam1Mine ? 'text-yellow-400' : 'text-white/90'}`}>{getTeamName(m.team1_id)}</div>
+                                    <span className="w-[15%] mx-1 text-center text-yellow-400 font-bold bg-black/40 py-1 rounded whitespace-nowrap">{m.score1 != null ? `${m.score1} : ${m.score2}` : "- : -"}</span>
+                                    <div className={`w-[40%] text-right truncate text-xs font-bold ${isTeam2Mine ? 'text-yellow-400' : 'text-white/90'}`}>{getTeamName(m.team2_id)}</div>
                                   </div>
                                 );
                               })}
@@ -549,7 +449,6 @@ function TurnierTabelleContent() {
         </>
       )}
 
-      {/* --- MODAL --- */}
       {activeRound && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#111] p-6 rounded-3xl w-full max-w-2xl border border-white/5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -557,83 +456,29 @@ function TurnierTabelleContent() {
               <h2 className="text-white font-bold text-xl">Spieltag {activeRound} verwalten</h2>
               <button onClick={() => setActiveRound(null)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition">✕</button>
             </div>
-
             <div className="space-y-4">
               {modalMatches.map((m) => {
                 const isHome = myManageableTeamIds.includes(m.team1_id);
                 const isAway = myManageableTeamIds.includes(m.team2_id);
-                
+                const team1 = teamMap[m.team1_id];
+                const team2 = teamMap[m.team2_id];
                 const s1 = scores[m.id]?.s1 ?? (m.score1 !== null ? String(m.score1) : "");
                 const s2 = scores[m.id]?.s2 ?? (m.score2 !== null ? String(m.score2) : "");
-
                 let actionUI = null;
-
-                if (m.status === "confirmed") {
-                  actionUI = (
-                    <div className="text-center">
-                      <div className="text-green-500 font-bold text-2xl tracking-widest">{m.score1} : {m.score2}</div>
-                      <div className="text-[10px] text-green-500 mt-1 uppercase tracking-wider font-bold">✔ Bestätigt</div>
-                    </div>
-                  );
-                } else if (m.status === "reported") {
-                  if (isAway) {
-                    actionUI = (
-                      <div className="flex flex-col items-center gap-2 w-full">
-                        <div className="font-bold text-2xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div>
-                        <div className="flex gap-2 w-full mt-1">
-                          <button onClick={() => handleConfirm(m.id)} className="flex-1 text-sm bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-white font-bold transition">✔</button>
-                          <button onClick={() => handleReject(m.id)} className="flex-1 text-sm bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-white font-bold transition">✖</button>
-                        </div>
-                      </div>
-                    );
-                  } else if (isHome) {
-                    actionUI = (
-                      <div className="text-center">
-                        <div className="font-bold text-2xl tracking-widest text-white">{m.score1} : {m.score2}</div>
-                        <div className="text-[10px] text-yellow-500 mt-1 uppercase tracking-wider font-bold">Wartet auf Bestätigung</div>
-                      </div>
-                    );
-                  }
-                } else { 
-                  if (isHome) {
-                    actionUI = (
-                      <div className="flex flex-col items-center gap-3 w-full">
-                        <div className="flex items-center gap-2">
-                          <input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
-                          <span className="font-bold text-gray-500">:</span>
-                          <input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" />
-                        </div>
-                        <button onClick={() => { if (s1 === "" || s2 === "") return alert("Bitte Ergebnis eintragen."); handleReport(m.id, Number(s1), Number(s2)); }} className="w-full text-sm bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-white font-bold transition">Melden</button>
-                      </div>
-                    );
-                  } else if (isAway) {
-                    actionUI = (
-                      <div className="text-center w-full">
-                        <div className="font-bold text-3xl text-white/20 tracking-widest mb-1">- : -</div>
-                        <div className="text-[10px] text-yellow-500 uppercase tracking-wider font-bold">⏳ Warten auf Heimteam</div>
-                      </div>
-                    );
-                  }
+                if (m.status === "confirmed") actionUI = <div className="text-center"><div className="text-green-500 font-bold text-2xl tracking-widest">{m.score1} : {m.score2}</div><div className="text-[10px] text-green-500 mt-1 uppercase tracking-wider font-bold">✔ Bestätigt</div></div>;
+                else if (m.status === "reported") {
+                  if (isAway) actionUI = <div className="flex flex-col items-center gap-2 w-full"><div className="font-bold text-2xl text-yellow-400 tracking-widest">{m.score1} : {m.score2}</div><div className="flex gap-2 w-full mt-1"><button onClick={() => handleConfirm(m.id)} className="flex-1 text-sm bg-green-600 py-2.5 rounded-xl text-white font-bold transition">✔</button><button onClick={() => handleReject(m.id)} className="flex-1 text-sm bg-red-600 py-2.5 rounded-xl text-white font-bold transition">✖</button></div></div>;
+                  else if (isHome) actionUI = <div className="text-center"><div className="font-bold text-2xl tracking-widest text-white">{m.score1} : {m.score2}</div><div className="text-[10px] text-yellow-500 mt-1 uppercase tracking-wider font-bold">Wartet auf Bestätigung</div></div>;
+                } else {
+                  if (isHome) actionUI = <div className="flex flex-col items-center gap-3 w-full"><div className="flex items-center gap-2"><input type="text" value={s1} onChange={(e) => updateScoreInput(m.id, 's1', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" /><span className="font-bold text-gray-500">:</span><input type="text" value={s2} onChange={(e) => updateScoreInput(m.id, 's2', e.target.value)} className="w-12 h-12 bg-[#0a0a0a] border border-white/10 text-white text-xl text-center rounded-xl font-bold focus:border-blue-500 focus:outline-none transition" /></div><button onClick={() => { if (s1 === "" || s2 === "") return alert("Bitte Ergebnis eintragen."); handleReport(m.id, Number(s1), Number(s2)); }} className="w-full text-sm bg-blue-600 py-2.5 rounded-xl text-white font-bold transition">Melden</button></div>;
+                  else if (isAway) actionUI = <div className="text-center w-full"><div className="font-bold text-3xl text-white/20 tracking-widest mb-1">- : -</div><div className="text-[10px] text-yellow-500 uppercase tracking-wider font-bold">⏳ Warten auf Heimteam</div></div>;
                 }
-
                 return (
                   <div key={m.id} className="flex flex-col sm:flex-row justify-between items-center bg-[#1e1e1e] p-5 rounded-2xl gap-4">
                     {m.status === "rejected" ? (
-                      <div className="flex flex-col items-center justify-center w-full text-center gap-2 py-2">
-                        <div className="text-red-500 font-bold text-lg md:text-xl tracking-wider uppercase flex items-center gap-2"><span>🚨</span> Konflikt: Ergebnis abgelehnt</div>
-                        <div className="text-sm font-bold text-gray-300 bg-black/40 px-4 py-1.5 rounded-full mt-1">{getTeamName(m.team1_id)} <span className="text-white/30 mx-2">vs</span> {getTeamName(m.team2_id)}</div>
-                        <div className="text-xs md:text-sm text-gray-400 bg-red-500/10 p-3 md:p-4 rounded-xl border border-red-500/20 mt-2 max-w-lg">
-                          Es gab eine Unstimmigkeit beim Ergebnis. Bitte öffnet ein <strong>Ticket im Discord</strong> oder <strong>taggt einen Admin</strong> im Gruppen-Channel zur Klärung.
-                        </div>
-                      </div>
+                      <div className="flex flex-col items-center justify-center w-full text-center gap-2 py-2"><div className="text-red-500 font-bold text-lg tracking-wider uppercase">🚨 Konflikt: Ergebnis abgelehnt</div><div className="text-sm font-bold text-gray-300">{team1?.teamname} vs {team2?.teamname}</div><div className="text-xs text-gray-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20 mt-2">Discord Ticket öffnen zur Klärung.</div></div>
                     ) : (
-                      <>
-                        <TeamCard team={teamMap[m.team1_id]} isDu={isHome} />
-                        <div className="flex flex-col items-center justify-center min-w-[120px]">
-                          {actionUI}
-                        </div>
-                        <TeamCard team={teamMap[m.team2_id]} isDu={isAway} reverseOnMobile />
-                      </>
+                      <><TeamCard team={team1} isDu={myAllTeamIds.includes(m.team1_id)} /><div className="flex flex-col items-center justify-center min-w-[120px]">{actionUI}</div><TeamCard team={team2} isDu={myAllTeamIds.includes(m.team2_id)} reverseOnMobile /></>
                     )}
                   </div>
                 );
@@ -647,7 +492,6 @@ function TurnierTabelleContent() {
   );
 }
 
-// 2. Exportierte Page mit Suspense Boundary umschlossen
 export default function TurnierTabelle() {
   return (
     <Suspense fallback={<div className="h-screen flex items-center justify-center text-white">Lade Tabelle...</div>}>

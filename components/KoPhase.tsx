@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image"; 
 
 // 🔥 HELPER: Holt das passende Bild
 const getTierImage = (level: number) => {
@@ -29,9 +30,8 @@ const getTierStyles = (level: number) => {
   return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
 };
 
-// 🔥 DIE UNIVERSELLE TEAM-CARD 🔥
+// 🔥 DIE UNIVERSELLE TEAM-CARD (Optimiert mit next/image) 🔥
 const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, isWinner = false }: { team?: any, isDu?: boolean, reverseOnMobile?: boolean, isTBD?: boolean, isWinner?: boolean }) => {
-  // Wenn es noch kein Team gibt (TBD)
   if (!team || isTBD) {
     return (
       <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} border border-white/5 bg-white/5 rounded-md px-3 py-1.5 text-sm font-bold flex-1 min-w-0 text-gray-500 italic`}>
@@ -42,7 +42,6 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, 
 
   const tierStyles = getTierStyles(team.level);
   
-  // Überprüfen der Cosmetics
   const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : tierStyles.border;
   const banner = team.equipped_banner;
   const bg = banner && banner !== 'default' 
@@ -57,18 +56,32 @@ const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, 
   return (
     <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
       {banner && banner !== 'default' && (
-        <img 
+        <Image 
           src={`/rewards/banner_${banner}.png`} 
-          alt="" 
-          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none"
+          alt="Banner" 
+          fill
+          sizes="(max-width: 768px) 100vw, 300px"
+          className="absolute inset-0 object-cover object-center scale-[1.05] pointer-events-none"
           onError={(e) => e.currentTarget.style.display = 'none'} 
         />
       )}
       <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
         {team.logo_url ? (
-          <img src={team.logo_url} loading="lazy" decoding="async" className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" alt="Logo" />
+          <Image 
+            src={team.logo_url} 
+            alt="Logo" 
+            width={32} 
+            height={32} 
+            className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
+          />
         ) : (
-          <img src={getTierImage(team.level)} loading="lazy" decoding="async" className="w-8 h-8 object-contain shrink-0" alt="Rank" />
+          <Image 
+            src={getTierImage(team.level)} 
+            alt="Rank" 
+            width={32} 
+            height={32} 
+            className="w-8 h-8 object-contain shrink-0" 
+          />
         )}
       
         <span className={`
@@ -110,7 +123,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   const [scores, setScores] = useState<any>({});
   
   const [localMatches, setLocalMatches] = useState<any[]>(matches);
-  const [myTeamRoles, setMyTeamRoles] = useState<any[]>([]); // 🔥 NEU: Rollen-State
+  const [myTeamRoles, setMyTeamRoles] = useState<any[]>([]); 
   
   const [activeMobileRound, setActiveMobileRound] = useState<number | null>(null);
 
@@ -118,7 +131,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     setLocalMatches(matches);
   }, [matches]);
 
-  // 🔥 NEU: Rollen des Users abrufen
   useEffect(() => {
     const fetchRoles = async () => {
       if (user) {
@@ -136,7 +148,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   // LOGIC
   // ===============================
 
-  // 🔥 NEU: Manageable Teams (Owner + Captains + Co-Captains)
   const myManageableTeamIds = useMemo(() => {
     if (!user) return [];
     const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
@@ -144,7 +155,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     return Array.from(new Set([...owned, ...coCaptains]));
   }, [teams, user, myTeamRoles]);
 
-  // 🔥 NEU: All Teams (Für das "(Du)" Tag)
   const myAllTeamIds = useMemo(() => {
     if (!user) return [];
     const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
@@ -190,7 +200,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     return `Runde ${roundIndex + 1}`;
   };
 
-  // 🔥 UPDATE: Nimmt jetzt `myManageableTeamIds`
   const myKoMatches = useMemo(() => {
     if (myManageableTeamIds.length === 0) return [];
     return koMatches.filter((m) => myManageableTeamIds.includes(m.team1_id) || myManageableTeamIds.includes(m.team2_id));
@@ -247,22 +256,18 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   };
 
   const handleConfirm = async (matchId: number) => {
-    // 1. Erstmal das Match normal bestätigen
     setLocalMatches((prev) => prev.map((m) => m.id === matchId ? { ...m, status: "confirmed", confirmed_by: user?.id } : m));
     await supabase.from("matches").update({ status: "confirmed", confirmed_by: user?.id }).eq("id", matchId);
 
-    // 2. 🔥 AUTOMATISCHER XP-BOOST CHECK 🔥
     const match = localMatches.find((m) => m.id === matchId);
     if (!match || match.score1 === null || match.score2 === null) return;
 
     const team1Wins = match.score1 > match.score2;
     const team2Wins = match.score2 > match.score1;
     
-    // Wer hat gewonnen?
     const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
     
     if (winningTeamId) {
-      // Hat der Sieger einen aktiven Boost?
       const { data: winnerData } = await supabase
         .from('teams')
         .select('active_xp_boosts, bonus_xp')
@@ -270,11 +275,9 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
         .single();
         
       if (winnerData && winnerData.active_xp_boosts > 0) {
-        // Bonus berechnen: z.B. 50 XP Pauschal + 10 XP pro geschossenem Tor
         const goalsScored = team1Wins ? match.score1 : match.score2;
         const extraXp = 50 + (goalsScored * 10); 
 
-        // Boost abziehen und XP gutschreiben
         await supabase.from('teams').update({
           active_xp_boosts: winnerData.active_xp_boosts - 1,
           bonus_xp: (winnerData.bonus_xp || 0) + extraXp
@@ -438,7 +441,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
             <div className="space-y-4">
               {[activeUserMatch].map((m) => {
-                // 🔥 UPDATE: Nutzt hier jetzt die Co-Captain fähigen Ids!
                 const isHome = myManageableTeamIds.includes(m.team1_id);
                 const isAway = myManageableTeamIds.includes(m.team2_id);
                 
@@ -509,11 +511,12 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
                       </div>
                     ) : (
                       <>
-                        {/* 🔥 UPDATE: isDu bekommt jetzt auch korrekt den Check */}
                         <TeamCard team={team1} isTBD={!team1} isDu={myAllTeamIds.includes(m.team1_id)} />
+                        
                         <div className="flex flex-col items-center justify-center min-w-[120px]">
                           {actionUI}
                         </div>
+                        
                         <TeamCard team={team2} isTBD={!team2} isDu={myAllTeamIds.includes(m.team2_id)} reverseOnMobile />
                       </>
                     )}

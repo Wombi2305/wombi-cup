@@ -643,11 +643,13 @@ export default function MeineTeamsPage() {
               <label className="relative cursor-pointer mb-3 block mt-1">
                 <div className="relative z-10 w-24 h-24 rounded-full border-4 border-[#1a1a1a] shadow-[0_0_15px_rgba(250,204,21,0.3)] bg-black/50 overflow-hidden flex items-center justify-center transition-transform duration-300">
                   {logoUrl ? (
-                    <img 
+                    <Image 
                       src={logoUrl} 
                       alt="Team Logo" 
+                      width={96}
+                      height={96}
                       className="w-full h-full object-cover" 
-                      fetchPriority="high" 
+                      priority 
                     />
                   ) : (
                     <span className="text-3xl text-gray-500">🛡️</span>
@@ -681,7 +683,7 @@ export default function MeineTeamsPage() {
                   {previewSettings.banner !== 'default' && (
                     <Image 
                       src={`/rewards/banner_${previewSettings.banner}.png`} 
-                      alt="" 
+                      alt="Banner" 
                       width={400}
                       height={100}
                       className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" 
@@ -689,12 +691,12 @@ export default function MeineTeamsPage() {
                   )}
                   <div className="relative z-10 flex items-center gap-3 w-full">
                     {logoUrl ? (
-                      <img 
+                      <Image 
                         src={logoUrl} 
                         alt="Team Logo Preview" 
+                        width={32}
+                        height={32}
                         className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
-                        loading="lazy" 
-                        decoding="async" 
                       />
                     ) : (
                       <Image 
@@ -722,12 +724,12 @@ export default function MeineTeamsPage() {
                 {allTeams.map((team) => (
                   <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-sm" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
                     {team.logo_url ? (
-                      <img 
+                      <Image 
                         src={team.logo_url} 
                         alt="Logo" 
+                        width={20}
+                        height={20}
                         className="w-5 h-5 rounded-full object-cover border border-white/20" 
-                        loading="lazy" 
-                        decoding="async" 
                       />
                     ) : (
                       <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
@@ -790,11 +792,8 @@ export default function MeineTeamsPage() {
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center gap-6 mb-4 mt-2">
-                      {/* 🔥 NEU: Der sichere Glow-Effekt ohne Kasten-Bug auf iOS */}
                       <div className="relative shrink-0 flex items-center justify-center w-24 h-24 md:w-32 md:h-32">
-                        {/* Die leuchtende Kugel im Hintergrund */}
                         <div className="absolute inset-0 bg-yellow-500/20 blur-xl rounded-full"></div>
-                        
                         <Image 
                           src={teamStats.tierImage} 
                           alt={`Rank Level ${teamStats.level}`} 
@@ -835,9 +834,8 @@ export default function MeineTeamsPage() {
                       </div>
                     </div>
 
-                    {/* --- STATS GRID BUNT (GAMING THEME) --- */}
+                    {/* --- STATS GRID BUNT --- */}
                     {(() => {
-                      // Berechnung der Winrate (Basierend auf den einzelnen Matches)
                       const matchesWon = currentTeam.total_match_wins || 0;
                       const matchesLost = currentTeam.total_match_losses || 0;
                       const totalMatches = matchesWon + matchesLost;
@@ -845,49 +843,41 @@ export default function MeineTeamsPage() {
 
                       return (
                         <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-center">
-                          
-                          {/* EVENTS (Lila / Fuchsia) */}
                           <div className="w-[30%] sm:flex-1 bg-fuchsia-500/5 border border-fuchsia-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-fuchsia-500 to-transparent"></div>
                             <span className="text-fuchsia-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(217,70,239,0.5)]">{currentTeam.participations || 0}</span>
                             <span className="text-[9px] md:text-[10px] text-fuchsia-400/80 uppercase tracking-widest mt-1 font-semibold">Events</span>
                           </div>
                           
-                          {/* SIEGE (Gold / Gelb) */}
                           <div className="w-[30%] sm:flex-1 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
                             <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
                             <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold">Siege</span>
                           </div>
                           
-                          {/* TOP 4 (Silber / Slate) */}
                           <div className="w-[30%] sm:flex-1 bg-slate-400/5 border border-slate-400/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-slate-400 to-transparent"></div>
                             <span className="text-slate-300 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(148,163,184,0.5)]">{currentTeam.wins_top3 || 0}</span>
                             <span className="text-[9px] md:text-[10px] text-slate-400/80 uppercase tracking-widest mt-1 font-semibold">Top 4</span>
                           </div>
                           
-                          {/* TOP 8 (Bronze / Orange) */}
                           <div className="w-[30%] sm:flex-1 bg-orange-500/5 border border-orange-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-orange-500 to-transparent"></div>
                             <span className="text-orange-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">{currentTeam.wins_top5 || 0}</span>
                             <span className="text-[9px] md:text-[10px] text-orange-400/80 uppercase tracking-widest mt-1 font-semibold">Top 8</span>
                           </div>
                           
-                          {/* TORE (Smaragd / Grün) */}
                           <div className="w-[30%] sm:flex-1 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
                             <span className="text-emerald-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{currentTeam.total_goals_scored || 0}</span>
                             <span className="text-[9px] md:text-[10px] text-emerald-400/80 uppercase tracking-widest mt-1 font-semibold">Tore</span>
                           </div>
 
-                          {/* WINRATE (Blau) */}
                           <div className="w-[30%] sm:flex-1 bg-blue-500/5 border border-blue-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
                             <span className="text-blue-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">{winrate}%</span>
                             <span className="text-[9px] md:text-[10px] text-blue-400/80 uppercase tracking-widest mt-1 font-semibold">Winrate</span>
                           </div>
-
                         </div>
                       );
                     })()}
@@ -1017,7 +1007,6 @@ export default function MeineTeamsPage() {
                   
                   <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1 mt-1">Gutscheine & Tickets</h4>
                   
-                  {/* 🔥 HIER SIND DIE BILDER JETZT OPTIMIERT 🔥 */}
                   <div className="grid grid-cols-3 gap-3 mb-2">
                     
                     {/* WARTELISTE */}
@@ -1144,7 +1133,6 @@ export default function MeineTeamsPage() {
                     <button onClick={() => setCosmeticTab("border")} className={`px-4 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold whitespace-nowrap transition-colors ${cosmeticTab === "border" ? "bg-white/10 text-white" : "bg-black/20 text-gray-500 hover:text-gray-300"}`}>Rahmen</button>
                   </div>
 
-                  {/* 🔥 BANNER BILDER OPTIMIERT 🔥 */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
                     {cosmeticTab === "banner" && (
                       <>
@@ -1152,9 +1140,9 @@ export default function MeineTeamsPage() {
                           <Image 
                             src="/rewards/banner_0.png" 
                             alt="Basic Banner" 
-                            width={400}
-                            height={150}
-                            className="absolute inset-0 w-full h-full object-cover" 
+                            fill
+                            sizes="(max-width: 768px) 50vw, 25vw"
+                            className="absolute inset-0 object-cover" 
                           />
                           {teamStats.level < 8 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
@@ -1167,9 +1155,9 @@ export default function MeineTeamsPage() {
                           <Image 
                             src="/rewards/banner_1.png" 
                             alt="Upgraded Banner" 
-                            width={400}
-                            height={150}
-                            className="absolute inset-0 w-full h-full object-cover" 
+                            fill
+                            sizes="(max-width: 768px) 50vw, 25vw"
+                            className="absolute inset-0 object-cover" 
                           />
                           {teamStats.level < 22 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
@@ -1182,9 +1170,9 @@ export default function MeineTeamsPage() {
                           <Image 
                             src="/rewards/banner_2.png" 
                             alt="Elite Banner" 
-                            width={400}
-                            height={150}
-                            className="absolute inset-0 w-full h-full object-cover" 
+                            fill
+                            sizes="(max-width: 768px) 50vw, 25vw"
+                            className="absolute inset-0 object-cover" 
                           />
                           {teamStats.level < 39 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
@@ -1197,9 +1185,9 @@ export default function MeineTeamsPage() {
                           <Image 
                             src="/rewards/banner_3.png" 
                             alt="Special Banner" 
-                            width={400}
-                            height={150}
-                            className="absolute inset-0 w-full h-full object-cover" 
+                            fill
+                            sizes="(max-width: 768px) 50vw, 25vw"
+                            className="absolute inset-0 object-cover" 
                           />
                           {teamStats.level < 47 && (
                             <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
@@ -1245,9 +1233,11 @@ export default function MeineTeamsPage() {
                       )}
                       <div className="relative z-10 flex items-center gap-3 w-full">
                         {logoUrl ? (
-                          <img 
+                          <Image 
                             src={logoUrl} 
                             alt="Logo" 
+                            width={32}
+                            height={32}
                             className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
                             loading="lazy" 
                             decoding="async" 

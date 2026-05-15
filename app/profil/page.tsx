@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image"; // 🔥 NEU IMPORTIERT
 
 export default function ProfilPage() {
   const [user, setUser] = useState<any>(null);
@@ -74,9 +75,6 @@ export default function ProfilPage() {
   const { avatarUrl, discordName, hasAccess } = useMemo(() => {
     if (!user) return { avatarUrl: "", discordName: "", hasAccess: false };
 
-    // 🔥 NEU: Prüft einfach, ob das Datenbankfeld "role" ausgefüllt ist.
-    // Wenn da z.B. "orga", "spieler" oder "teamvm" drin steht, ist es true.
-    // Wenn es leer (null/undefined) ist, ist es false.
     const hasAnyRole = !!profile?.role;
 
     return {
@@ -105,13 +103,19 @@ export default function ProfilPage() {
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-yellow-500/10 rounded-full blur-3xl"></div>
           
           <div className="relative mb-4">
-            <img src={avatarUrl} alt="Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-[#1a1a1a] shadow-[0_0_15px_rgba(250,204,21,0.3)] relative z-10" referrerPolicy="no-referrer" />
+            {/* 🔥 OPTIMIERT: next/image für den Discord Avatar */}
+            <Image 
+              src={avatarUrl} 
+              alt="Avatar" 
+              width={128}
+              height={128}
+              className="w-32 h-32 rounded-full object-cover border-4 border-[#1a1a1a] shadow-[0_0_15px_rgba(250,204,21,0.3)] relative z-10" 
+            />
             <div className="absolute inset-0 rounded-full border-2 border-yellow-500/50 scale-105"></div>
           </div>
           
           <h2 className="text-xl md:text-2xl font-bold mb-4 tracking-wide">{discordName}</h2>
           
-          {/* Zeigt die Rolle basierend auf dem Datenbank-Eintrag an */}
           <div className="flex flex-col gap-2 w-full">
             {profile?.role === "orga" && <span className="w-full bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2">👑 Orga</span>}
             {profile?.role === "teamvm" && <span className="w-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2">🛡️ TeamVM</span>}
@@ -121,7 +125,6 @@ export default function ProfilPage() {
             {profile?.role === "streamer" && <span className="w-full bg-purple-500/10 text-purple-400 border border-purple-500/20 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-widest flex justify-center items-center gap-2">🎥 Streamer</span>}
           </div>
 
-          {/* 🔥 NEU: EA ID Feld 🔥 */}
           <div className="mt-6 w-full flex flex-col gap-2 border-t border-white/10 pt-6">
             <label className="text-[10px] uppercase tracking-widest text-gray-500 font-bold text-left pl-1">EA ID (In-Game Name)</label>
             <input
@@ -144,7 +147,6 @@ export default function ProfilPage() {
               {savingEaId ? "Speichert..." : "Speichern"}
             </button>
 
-            {/* Erfolgs- / Fehlermeldung */}
             {eaIdMessage && (
               <span className={`text-xs mt-1 font-medium ${eaIdMessage.type === "success" ? "text-green-400" : "text-red-400"}`}>
                 {eaIdMessage.text}
@@ -159,9 +161,15 @@ export default function ProfilPage() {
           {hasAccess ? (
             <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center text-center h-full relative overflow-hidden min-h-[400px]">
               
-              {/* BILD CONTAINER */}
               <div className="w-full max-w-lg mb-6 relative rounded-2xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.6)] border border-white/5">
-                <img src="/Spieleranalys.png" alt="Teaser Spieleranalyse" className="w-full h-auto object-cover opacity-90" />
+                {/* 🔥 OPTIMIERT: next/image für den großen Teaser */}
+                <Image 
+                  src="/Spieleranalys.png" 
+                  alt="Teaser Spieleranalyse" 
+                  width={800}
+                  height={400}
+                  className="w-full h-auto object-cover opacity-90" 
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent opacity-90"></div>
                 
                 <div className="absolute bottom-4 left-0 w-full text-center z-10 px-4">
