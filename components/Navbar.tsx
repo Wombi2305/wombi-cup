@@ -65,6 +65,25 @@ export default function Navbar() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // 🔥 NEU: Hilfsfunktion für den dynamischen Login von JEDER beliebigen Seite aus
+  const handleNavbarDiscordLogin = async () => {
+    try {
+      const origin = window.location.origin;
+      // Holt den exakten aktuellen Pfad inklusive Query-Parameter (?id=...)
+      const currentPath = window.location.pathname + window.location.search;
+      const redirectUrl = `${origin}/auth/callback?next=${encodeURIComponent(currentPath)}`;
+
+      await supabase.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+    } catch (error) {
+      console.error("Navbar Login Fehler:", error);
+    }
+  };
+
   const ORGA_ROLE = "1492478735444873398";
   const STREAMER_ROLE = "1493976124173062195";
   const isAdmin = userRoles.includes(ORGA_ROLE);
@@ -122,7 +141,10 @@ export default function Navbar() {
             {user ? null : (
               <>
                 <div className="w-px h-6 bg-white/10"></div>
-                <DiscordLogin />
+                {/* 🔥 HIER GEÄNDERT: Wir übergeben die neue dynamische Funktion als Klick-Handler, falls die Komponente das unterstützt, oder rufen sie direkt auf */}
+                <div onClick={handleNavbarDiscordLogin}>
+                  <DiscordLogin />
+                </div>
               </>
             )}
           </div>
@@ -189,7 +211,12 @@ export default function Navbar() {
 
           <div className="pt-8 flex flex-col gap-4">
             <AccountMenu />
-            {!user && <DiscordLogin />}
+            {/* 🔥 HIER GEÄNDERT: Auch im mobilen Menü den dynamischen Klick-Handler nutzen */}
+            {!user && (
+              <div onClick={handleNavbarDiscordLogin}>
+                <DiscordLogin />
+              </div>
+            )}
           </div>
         </div>
       )}
