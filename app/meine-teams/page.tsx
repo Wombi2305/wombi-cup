@@ -1269,8 +1269,8 @@ export default function MeineTeamsPage() {
                       <input type="text" value={teamname} onChange={(e) => setTeamname(e.target.value)} placeholder="Dein Teamname" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
                     </div>
                     <div className="space-y-2">
-                      <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Captain (Riot ID)</label>
-                      <input type="text" value={captain} onChange={(e) => setCaptain(e.target.value)} placeholder="Riot ID eingeben" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
+                      <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Captain (EA ID)</label>
+                      <input type="text" value={captain} onChange={(e) => setCaptain(e.target.value)} placeholder="EA ID eingeben" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
                     </div>
                   </div>
                   
