@@ -34,7 +34,6 @@ export default function Anmelden() {
       setUser(currentUser);
 
       if (currentUser) {
-        // Lade ALLE Teams, die der User erstellt hat (und die nicht gelöscht sind)
         const { data: teams } = await supabase
           .from("teams")
           .select("id, teamname, captain, is_active, user_id")
@@ -80,16 +79,11 @@ export default function Anmelden() {
     if (discordUser && discordUser.nick) {
       const rawNick = discordUser.nick.trim();
 
-      // 🔥 SCHLAUERER CHECK: Gibt es das Trennzeichen überhaupt?
       if (rawNick.includes("|")) {
-        // Fall 1: Alles richtig gemacht ("Teamname | CaptainName")
         const parts = rawNick.split("|");
         defaultTeam = parts[0].trim();
-        // Falls jemand "Team | " schreibt, fangen wir das auch ab
         defaultCaptain = parts.length > 1 ? parts[1].trim() : ""; 
       } else {
-        // Fall 2: Falsches Format (z.B. nur "Kevin" oder "Gamer123")
-        // Wir nehmen den Namen als Captain, das Team MUSS er selbst eintippen
         defaultCaptain = rawNick;
         defaultTeam = ""; 
       }
@@ -151,11 +145,8 @@ export default function Anmelden() {
 
       let currentTeamId;
       
-      // LOGIK: Hat der User schon Teams?
       if (ownedTeams.length > 0) {
         const availableTeams = ownedTeams.filter(ot => !registrations.some((r: any) => r.team_id === ot.id));
-        
-        // Nimm das ausgewählte Team (oder das erste verfügbare als Fallback)
         currentTeamId = selectedTeam[tournamentId] || availableTeams[0]?.id;
         
         if (!currentTeamId) {
@@ -163,7 +154,6 @@ export default function Anmelden() {
           return showMessage("❌ Alle deine Teams sind bereits angemeldet.");
         }
       } else {
-        // FALLBACK: User hat kein Team -> wir erstellen eins
         if (!teamname[tournamentId]) {
             setLoading((prev) => ({ ...prev, [tournamentId]: false }));
             return showMessage("Teamname fehlt");
@@ -186,7 +176,6 @@ export default function Anmelden() {
         setOwnedTeams([newTeam]);
       }
 
-      // Team zum Turnier anmelden
       const { error: insertError } = await supabase.from("tournament_registrations").insert([{ team_id: currentTeamId, tournament_id: Number(tournamentId), status: status }]);
       if (insertError) throw insertError;
 
@@ -199,8 +188,10 @@ export default function Anmelden() {
     setLoading((prev) => ({ ...prev, [tournamentId]: false }));
   };
 
-  if (tournamentsLoading) {
-    return <div className="h-screen flex items-center justify-center text-white">Lade Turniere...</div>;
+  // 🔥 HIER GEFIXT: Das "Stopp-Schild"! Solange die API im Hintergrund noch prüft, wird ein sauberer Lade-Bildschirm gezeigt.
+  // Erst wenn Next.js sicher weiß, WER eingeloggt ist, schaltet die Seite um!
+  if (tournamentsLoading || isCheckingDiscord || !dbCheckDone) {
+    return <div className="h-screen flex items-center justify-center text-white font-bold tracking-wide animate-pulse">Lade Turnieranmeldung...</div>;
   }
 
   return (
@@ -221,11 +212,9 @@ export default function Anmelden() {
             const isReady = t.draw_finished === true;
             const percent = t.max_teams ? Math.min((approvedCount / t.max_teams) * 100, 100) : 0;
             
-            // Finde ALLE Registrierungen dieses Users in DIESEM Turnier
             const myRegistrations = registrations.filter((r: any) => r.teams?.user_id === user?.id);
             const registeredTeamIds = myRegistrations.map((r: any) => r.team_id);
             
-            // Finde heraus, welche Teams des Users NOCH NICHT in diesem Turnier sind
             const availableTeams = ownedTeams.filter(ot => !registeredTeamIds.includes(ot.id));
 
             return (
@@ -272,15 +261,20 @@ export default function Anmelden() {
                       </div>
                     )}
 
-                    {/* Formular für verbleibende Teams */}
+                    {/* Formular-Bereich */}
                     {(availableTeams.length > 0 || ownedTeams.length === 0) && (
                       <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 pt-2 border-t border-white/10 mt-2">
                         
-                        {!discordUser || !hasRequiredRole ? (
-                          <div className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col justify-center items-center text-center">
-                            <span className="text-gray-400 font-bold text-xs uppercase tracking-widest">Zugang gesperrt</span>
-                            <span className="text-gray-500 text-[10px] mt-1">Login & TeamVM Rolle benötigt</span>
-                          </div>
+                        {/* 🔥 HIER GEFIXT: Wenn der Supabase User ODER der Discord-Eintrag fehlt, greift die Sperre sofort felsenfest und zeigt den Button ohne Lag an! */}
+                        {!user || !discordUser || !hasRequiredRole ? (
+                          <a 
+                            href="https://discord.gg/Ajjx7eEdBX" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
+                          >
+                            Discord Beitreten
+                          </a>
                         ) : (
                           <>
                             {ownedTeams.length > 0 ? (
@@ -312,7 +306,6 @@ export default function Anmelden() {
                                 </div>
                               </div>
                             ) : (
-                              // FALLBACK: Wenn noch gar kein Team existiert
                               <>
                                 <input 
                                   type="text" 
@@ -330,23 +323,13 @@ export default function Anmelden() {
                                 />
                               </>
                             )}
+
+                            <button disabled={loading[t.id]} className="w-full p-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/20 active:scale-95 mt-2">
+                              {loading[t.id] ? "Lädt..." : isFull ? "Auf Warteliste setzen" : "Team Anmelden"}
+                            </button>
                           </>
                         )}
 
-                        {!discordUser || !hasRequiredRole ? (
-                          <a 
-                            href="https://discord.gg/Ajjx7eEdBX" 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
-                          >
-                            Discord Beitreten
-                          </a>
-                        ) : (
-                          <button disabled={loading[t.id]} className="w-full p-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/20 active:scale-95">
-                            {loading[t.id] ? "Lädt..." : isFull ? "Auf Warteliste setzen" : "Team Anmelden"}
-                          </button>
-                        )}
                       </form>
                     )}
                   </div>
