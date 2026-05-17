@@ -78,9 +78,21 @@ export default function Anmelden() {
     let defaultCaptain = "";
 
     if (discordUser && discordUser.nick) {
-      const parts = discordUser.nick.split("|");
-      defaultTeam = parts[0] ? parts[0].trim() : discordUser.nick;
-      defaultCaptain = parts[1] ? parts[1].trim() : "";
+      const rawNick = discordUser.nick.trim();
+
+      // 🔥 SCHLAUERER CHECK: Gibt es das Trennzeichen überhaupt?
+      if (rawNick.includes("|")) {
+        // Fall 1: Alles richtig gemacht ("Teamname | CaptainName")
+        const parts = rawNick.split("|");
+        defaultTeam = parts[0].trim();
+        // Falls jemand "Team | " schreibt, fangen wir das auch ab
+        defaultCaptain = parts.length > 1 ? parts[1].trim() : ""; 
+      } else {
+        // Fall 2: Falsches Format (z.B. nur "Kevin" oder "Gamer123")
+        // Wir nehmen den Namen als Captain, das Team MUSS er selbst eintippen
+        defaultCaptain = rawNick;
+        defaultTeam = ""; 
+      }
     }
 
     setTeamname((prev) => {

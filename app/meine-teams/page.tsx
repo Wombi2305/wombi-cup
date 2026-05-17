@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image"; 
 import TeamCard from "@/components/TeamCard"; 
+import { COSMETIC_COLORS, COSMETIC_BORDERS } from "@/lib/cosmetics"; 
 
 const resizeImage = (file: File, maxWidth = 400, maxHeight = 400): Promise<File> => {
   return new Promise((resolve, reject) => {
@@ -108,13 +110,37 @@ const getTierStyles = (level: number) => {
 };
 
 export default function MeineTeamsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Lese den aktuellen Tab direkt aus der URL (Standard ist "overview")
+  const tabParam = searchParams.get("tab");
+  const activeTab = (tabParam === "inventory" || tabParam === "members") ? tabParam : "overview";
+
+  // Diese Funktion ersetzt den lokalen State und pusht den neuen Tab als Parameter (?tab=...) in die URL.
+  const setActiveTab = useCallback((tab: "overview" | "inventory" | "members") => {
+    const params = new URLSearchParams(searchParams.toString());
+    
+    if (tab === "overview") {
+      params.delete("tab"); // Hält die URL sauber, wenn wir auf dem Haupt-Tab sind
+    } else {
+      params.set("tab", tab);
+    }
+
+    const queryString = params.toString();
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    
+    // scroll: false verhindert, dass die Seite beim Tab-Wechsel nach ganz oben springt
+    router.push(newUrl, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [allTeams, setAllTeams] = useState<any[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<"overview" | "inventory" | "members">("overview");
   const [cosmeticTab, setCosmeticTab] = useState<"banner" | "color" | "border">("banner");
   const [pendingCosmetics, setPendingCosmetics] = useState<{banner?: string, color?: string, border?: string, background?: string}>({});
   
@@ -248,7 +274,7 @@ export default function MeineTeamsPage() {
       setCaptain(team.captain || "");
       setLogoUrl(team.logo_url || "");
     }
-  }, []);
+  }, [setActiveTab]);
 
   const handleSelectCosmetic = useCallback((category: "banner" | "color" | "border" | "background", itemValue: string) => {
     if (!selectedTeamId || isCreating || !currentTeam) return;
@@ -602,10 +628,10 @@ export default function MeineTeamsPage() {
       teamStats: stats,
       tierStyles: styles,
       previewSettings: {
-        border: borderVal === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : styles.border,
+        border: COSMETIC_BORDERS[borderVal]?.border || styles.border,
+        colorClass: COSMETIC_COLORS[colorVal]?.text || styles.text,
         banner: bannerVal,
         bg: styles.bg,
-        colorClass: colorVal === '1' ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' : styles.text,
         getValue: getCosmeticValue
       }
     };
@@ -673,7 +699,6 @@ export default function MeineTeamsPage() {
               <div className="hidden lg:flex bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex-col relative overflow-hidden transform-gpu">
                 <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
                 
-                {/* 🔥 HIER WIRD DIE TEAMCARD KOMPONENTE GENUTZT */}
                 <div className="w-full">
                   <TeamCard 
                     team={{
@@ -1104,21 +1129,21 @@ export default function MeineTeamsPage() {
                       </button>
                     </div>
 
-                    {/* HIGHLIGHT */}
+                    {/* RARE BACKGROUND TOKENS */}
                     <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col relative h-[170px] transform-gpu">
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
-                        <span className="text-[11px] font-black text-white">{currentTeam.highlight_tickets || 0}x</span>
+                        <span className="text-[11px] font-black text-white">{currentTeam.rare_background_tokens || 0}x</span>
                       </div>
                       <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
                         <Image 
-                          src="/rewards/homepage_highlight.png" 
-                          alt="HP Highlight" 
+                          src="/rewards/rare_background.png" 
+                          alt="Rare Background" 
                           width={150}
                           height={100}
                           className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
                         />
                       </div>
-                      <button onClick={() => handleRedeemTicket('highlight_tickets', 'Homepage-Highlight für den Club')} disabled={saving || (currentTeam.highlight_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                      <button onClick={() => handleRedeemTicket('rare_background_tokens', 'Seltenen Hintergrund freischalten')} disabled={saving || (currentTeam.rare_background_tokens || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                         Einlösen
                       </button>
                     </div>
@@ -1152,116 +1177,59 @@ export default function MeineTeamsPage() {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
-                    {cosmeticTab === "banner" && (
-                      <>
-                        <button disabled={teamStats.level < 8} onClick={() => handleSelectCosmetic('banner', '0')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 8 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '0' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <Image 
-                            src="/rewards/banner_0.png" 
-                            alt="Basic Banner" 
-                            fill
-                            sizes="(max-width: 768px) 50vw, 25vw"
-                            className="absolute inset-0 object-cover" 
-                          />
-                          {teamStats.level < 8 && (
-                            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-                              <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 8</span>
-                            </div>
-                          )}
-                        </button>
-                        
-                        <button disabled={teamStats.level < 22} onClick={() => handleSelectCosmetic('banner', '1')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 22 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <Image 
-                            src="/rewards/banner_1.png" 
-                            alt="Upgraded Banner" 
-                            fill
-                            sizes="(max-width: 768px) 50vw, 25vw"
-                            className="absolute inset-0 object-cover" 
-                          />
-                          {teamStats.level < 22 && (
-                            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-                              <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 22</span>
-                            </div>
-                          )}
-                        </button>
-                        
-                        <button disabled={teamStats.level < 39} onClick={() => handleSelectCosmetic('banner', '2')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 39 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '2' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <Image 
-                            src="/rewards/banner_2.png" 
-                            alt="Elite Banner" 
-                            fill
-                            sizes="(max-width: 768px) 50vw, 25vw"
-                            className="absolute inset-0 object-cover" 
-                          />
-                          {teamStats.level < 39 && (
-                            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-                              <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 39</span>
-                            </div>
-                          )}
-                        </button>
-
-                        <button disabled={teamStats.level < 47} onClick={() => handleSelectCosmetic('banner', '3')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 47 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '3' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                          <Image 
-                            src="/rewards/banner_3.png" 
-                            alt="Special Banner" 
-                            fill
-                            sizes="(max-width: 768px) 50vw, 25vw"
-                            className="absolute inset-0 object-cover" 
-                          />
-                          {teamStats.level < 47 && (
-                            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-                              <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 47</span>
-                            </div>
-                          )}
-                        </button>
-                      </>
-                    )}
-                    {cosmeticTab === "color" && (
-                      <button disabled={teamStats.level < 14} onClick={() => handleSelectCosmetic('color', '1')} className={`relative border-2 rounded-xl overflow-hidden h-20 w-full flex items-center justify-center transition ${teamStats.level < 14 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('color') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                        <div className="absolute inset-0 w-full h-full bg-gradient-to-tr from-purple-500 to-blue-500"></div>
-                        {teamStats.level < 14 && (
-                          <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-                            <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 14</span>
-                          </div>
-                        )}
-                      </button>
-                    )}
-                    {cosmeticTab === "border" && (
-                      <button disabled={teamStats.level < 40} onClick={() => handleSelectCosmetic('border', '1')} className={`relative border-2 rounded-xl overflow-hidden h-20 w-full flex items-center justify-center transition ${teamStats.level < 40 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('border') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
-                        <div className="absolute inset-0 w-full h-full bg-white/5 border-[3px] border-yellow-500"></div>
-                        {teamStats.level < 40 && (
-                          <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-                            <span className="text-lg font-black uppercase tracking-widest text-red-500">Lvl 40</span>
-                          </div>
-                        )}
-                      </button>
-                    )}
-
-                    {/* 🔥 DYNAMISCHE CUSTOM REWARDS (BANNER/FARBEN/RAHMEN) 🔥 */}
+                    {/* 🔥 ALLE REWARDS SIND JETZT DYNAMISCH (Level-Up & Spezial) 🔥 */}
                     {currentTeam?.team_rewards?.filter((r:any) => r.custom_rewards?.type === cosmeticTab).map((tr:any) => {
                       const reward = tr.custom_rewards;
+                      if (!reward) return null;
+
+                      const isBanner = cosmeticTab === "banner";
+                      const isColor = cosmeticTab === "color";
+                      const isBorder = cosmeticTab === "border";
+
                       return (
                         <button 
                           key={tr.id}
                           onClick={() => handleSelectCosmetic(cosmeticTab, reward.value)} 
-                          className={`relative border-2 rounded-xl overflow-hidden ${cosmeticTab === "banner" ? "aspect-[4.8/1]" : "h-20"} w-full flex items-center justify-center transition ${previewSettings.getValue(cosmeticTab) === reward.value ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}
-                          title={reward.name}
+                          className={`relative border-2 rounded-xl overflow-hidden ${isBanner ? "aspect-[4.8/1]" : "h-20"} w-full flex items-center justify-center transition ${previewSettings.getValue(cosmeticTab) === reward.value ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}
                         >
-                          <Image 
-                            src={reward.image_url} 
-                            alt={reward.name} 
-                            fill
-                            sizes="(max-width: 768px) 50vw, 25vw"
-                            className="absolute inset-0 object-cover" 
-                          />
-                          <div className="absolute top-1 right-1 bg-black/60 rounded px-1.5 py-0.5 z-10">
-                            <span className="text-[8px] font-black uppercase text-yellow-500 tracking-widest">Spezial</span>
-                          </div>
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity z-0">
-                            <span className="text-[10px] font-black uppercase text-white p-2 text-center drop-shadow-md">{reward.name}</span>
-                          </div>
+                          {/* BANNER RENDER */}
+                          {isBanner && reward.image_url && reward.image_url !== 'EMPTY' && (
+                            <Image 
+                              src={reward.image_url} 
+                              alt={reward.name} 
+                              fill
+                              sizes="(max-width: 768px) 50vw, 25vw"
+                              className="absolute inset-0 object-cover" 
+                            />
+                          )}
+
+                          {/* COLOR RENDER (Fallback auf cosmetics.ts) */}
+                          {isColor && (
+                            reward.image_url && reward.image_url !== 'EMPTY' && reward.image_url !== 'NULL' ? (
+                              <Image src={reward.image_url} alt={reward.name} fill className="absolute inset-0 object-cover" />
+                            ) : (
+                              <div className={`absolute inset-0 w-full h-full ${COSMETIC_COLORS[reward.value]?.bg || 'bg-white/10'}`}></div>
+                            )
+                          )}
+
+                          {/* BORDER RENDER (Fallback auf cosmetics.ts) */}
+                          {isBorder && (
+                            reward.image_url && reward.image_url !== 'EMPTY' && reward.image_url !== 'NULL' ? (
+                              <Image src={reward.image_url} alt={reward.name} fill className="absolute inset-0 object-cover" />
+                            ) : (
+                              <div className={`absolute inset-0 w-full h-full bg-white/5 border-[3px] ${COSMETIC_BORDERS[reward.value]?.preview || 'border-white/20'}`}></div>
+                            )
+                          )}
                         </button>
                       );
                     })}
+
+                    {/* Fallback, falls das Team (noch) nichts für diesen Tab besitzt */}
+                    {(!currentTeam?.team_rewards || currentTeam.team_rewards.filter((r:any) => r.custom_rewards?.type === cosmeticTab).length === 0) && (
+                      <div className="col-span-full py-8 text-center text-[10px] uppercase tracking-widest text-gray-500 bg-white/5 border border-white/5 rounded-xl">
+                        Noch keine Items freigeschaltet
+                      </div>
+                    )}
                   </div>
 
                   {/* 🔥 MOBILE TEAM KARTE VORSCHAU 🔥 */}

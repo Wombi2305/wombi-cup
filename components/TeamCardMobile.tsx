@@ -1,6 +1,7 @@
 import Image from "next/image";
+import { COSMETIC_COLORS, COSMETIC_BORDERS } from "@/lib/cosmetics"; // 🔥 Import des Wörterbuchs
 
-// 🔥 HELPER
+// 🔥 HELPER: Holt das passende Bild
 const getTierImage = (level: number) => {
   const l = level || 1;
   if (l >= 45) return "/Prisma.png";
@@ -13,6 +14,7 @@ const getTierImage = (level: number) => {
   return "/Bronze.png";
 };
 
+// 🔥 HELPER: Holt die Standard-Werte für Level
 const getTierStyles = (level: number) => {
   const l = level || 1;
   if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
@@ -39,23 +41,19 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
   }
 
   const tierStyles = getTierStyles(team.level);
-  const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 
-                 team.equipped_border === 'diamond' ? 'border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.6)] animate-pulse' : tierStyles.border;
+  
+  // 🔥 NEU: Holt die Rahmen- und Textfarbe dynamisch aus cosmetics.ts
+  const border = COSMETIC_BORDERS[team.equipped_border]?.border || tierStyles.border;
+  const textColor = COSMETIC_COLORS[team.equipped_color]?.text || tierStyles.text;
+
   const banner = team.equipped_banner;
   const bg = banner && banner !== 'default' ? 'bg-black/60' : tierStyles.bg;
   
-  let textColor = tierStyles.text;
-  if (team.equipped_color === '1') textColor = 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400';
-  if (team.equipped_color === 'cyberpunk') textColor = 'text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.8)]';
-
+  // LOGIK FÜR DAS BANNER
   let resolvedBannerUrl = null;
   if (banner && banner !== 'default') {
-    if (['0', '1', '2', '3'].includes(banner)) {
-      resolvedBannerUrl = `/rewards/banner_${banner}.png`;
-    } else {
-      const customReward = team.team_rewards?.find((tr: any) => tr.custom_rewards?.type === 'banner' && tr.custom_rewards?.value === banner);
-      resolvedBannerUrl = customReward?.custom_rewards?.image_url || null;
-    }
+    const customReward = team.team_rewards?.find((tr: any) => tr.custom_rewards?.type === 'banner' && tr.custom_rewards?.value === banner);
+    resolvedBannerUrl = customReward?.custom_rewards?.image_url || null;
   }
 
   return (
