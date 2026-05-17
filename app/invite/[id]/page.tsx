@@ -60,16 +60,18 @@ export default function InvitePage() {
 
   useEffect(() => {
     const fetchInviteData = async () => {
-      const teamId = params.id as string;
-      if (!teamId) {
+      const token = params.id as string; // 🔥 id entspricht hier dem kryptischen invite_token aus der URL
+      if (!token) {
         setLoading(false);
         return;
       }
 
+      // 🔥 GEÄNDERT: Wir filtern nach 'invite_token' statt nach der numerischen ID
       const { data: teamData, error: teamError } = await supabase
         .from("teams")
         .select("*")
-        .eq("id", teamId)
+        .eq("invite_token", token)
+        .eq("is_deleted", false)
         .single();
 
       if (teamError || !teamData) {
@@ -105,7 +107,7 @@ export default function InvitePage() {
       const { data: memberData } = await supabase
         .from("team_members")
         .select("id")
-        .eq("team_id", teamId)
+        .eq("team_id", teamData.id)
         .eq("user_id", currentUser.id)
         .single();
 
@@ -124,7 +126,6 @@ export default function InvitePage() {
   const handleDiscordLogin = async () => {
     setJoining(true);
     try {
-      // Erklingt automatisch nach deiner Live-Domain (wombicup.de oder www.wombicup.de)
       const origin = window.location.origin; 
       const redirectUrl = `${origin}/auth/callback?next=/invite/${params.id}`;
 
@@ -190,11 +191,9 @@ export default function InvitePage() {
 
   return (
     <main className="min-h-[calc(100vh-80px)] px-4 py-12 flex flex-col items-center justify-center text-white relative overflow-hidden">
-      
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none z-0 opacity-50"></div>
 
       <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-6 md:p-10 shadow-2xl flex flex-col items-center text-center w-full max-w-lg relative z-10 transform-gpu animate-in fade-in slide-in-from-bottom-8 duration-500">
-        
         <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-6 z-10 relative">Teameinladung</h3>
         
         <div className="flex items-center justify-between gap-2 sm:gap-4 mb-6 w-full z-10 relative mt-4">
@@ -289,7 +288,6 @@ export default function InvitePage() {
             </button>
           )}
         </div>
-
       </div>
     </main>
   );

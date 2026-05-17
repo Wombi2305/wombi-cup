@@ -109,21 +109,29 @@ const getTierStyles = (level: number) => {
   return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
 };
 
+// 🔥 HELPER: Generiert ein sicheres kryptisches Token
+const generateSecureToken = (length = 16) => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let token = "";
+  for (let i = 0; i < length; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+};
+
 function MeineTeamsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Lese den aktuellen Tab direkt aus der URL (Standard ist "overview")
   const tabParam = searchParams.get("tab");
   const activeTab = (tabParam === "inventory" || tabParam === "members") ? tabParam : "overview";
 
-  // Diese Funktion ersetzt den lokalen State und pusht den neuen Tab als Parameter (?tab=...) in die URL.
   const setActiveTab = useCallback((tab: "overview" | "inventory" | "members") => {
     const params = new URLSearchParams(searchParams.toString());
     
     if (tab === "overview") {
-      params.delete("tab"); // Hält die URL sauber, wenn wir auf dem Haupt-Tab sind
+      params.delete("tab"); 
     } else {
       params.set("tab", tab);
     }
@@ -131,7 +139,6 @@ function MeineTeamsContent() {
     const queryString = params.toString();
     const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
     
-    // scroll: false verhindert, dass die Seite beim Tab-Wechsel nach ganz oben springt
     router.push(newUrl, { scroll: false });
   }, [pathname, router, searchParams]);
 
@@ -161,6 +168,7 @@ function MeineTeamsContent() {
   const [members, setMembers] = useState<any[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [inviteUrlState, setInviteUrlState] = useState(""); // 🔥 State für die fertige kryptische URL im Modal
 
   useEffect(() => {
     const fetchData = async () => {
@@ -252,11 +260,39 @@ function MeineTeamsContent() {
     setTimeout(() => setMessage(null), 3000);
   }, []);
 
-  const handleCopyInviteLink = () => {
+  // 🔥 GEÄNDERT: Generiert und liest den verschlüsselten Token-Link aus
+  const handleOpenInviteModal = async () => {
     if (!currentTeam) return;
-    const inviteLink = `${window.location.origin}/invite/${currentTeam.id}`;
-    navigator.clipboard.writeText(inviteLink);
-    showMessage("✅ Einladungslink in die Zwischenablage kopiert!");
+    
+    let token = currentTeam.invite_token;
+
+    // Falls das Team in der Datenbank noch kein Token hat, generieren wir jetzt live eins
+    if (!token) {
+      const newToken = generateSecureToken(16);
+      const { error } = await supabase
+        .from("teams")
+        .update({ invite_token: newToken })
+        .eq("id", currentTeam.id);
+
+      if (!error) {
+        token = newToken;
+        // State aktualisieren, damit wir es nicht neu laden müssen
+        setAllTeams(prev => prev.map(t => t.id === currentTeam.id ? { ...t, invite_token: newToken } : t));
+      } else {
+        showMessage("❌ Fehler beim Generieren des Einladungscodes.");
+        return;
+      }
+    }
+
+    // Setze den kryptischen Link in den State für das Modal
+    setInviteUrlState(`${window.location.origin}/invite/${token}`);
+    setShowAddMemberModal(true);
+  };
+
+  const handleCopyInviteLink = () => {
+    if (!inviteUrlState) return;
+    navigator.clipboard.writeText(inviteUrlState);
+    showMessage("✅ Kryptischer Einladungslink kopiert!");
   };
 
   const handleSelectTeam = useCallback((team: any, setCreating = false) => {
@@ -510,7 +546,7 @@ function MeineTeamsContent() {
       }
     } catch (error: any) {
       showMessage("❌ Fehler beim Hochladen des Logos");
-    } finally {
+    } finally{
       setUploadingLogo(false);
     }
   };
@@ -524,10 +560,12 @@ function MeineTeamsContent() {
     setSaving(true);
     try {
       const isFirstTeam = allTeams.length === 0;
+      // 🔥 NEU: Direkt beim Erstellen des Teams erzeugen wir auch ein sicheres Token mit
+      const initialToken = generateSecureToken(16);
       
       const { data: newTeam, error } = await supabase
         .from("teams")
-        .insert([{ teamname, captain, user_id: user.id, is_active: isFirstTeam, logo_url: logoUrl }])
+        .insert([{ teamname, captain, user_id: user.id, is_active: isFirstTeam, logo_url: logoUrl, invite_token: initialToken }])
         .select()
         .single();
 
@@ -544,7 +582,6 @@ function MeineTeamsContent() {
       handleSelectTeam(newTeamWithRole, false);
       showMessage("✅ Team erfolgreich erstellt!");
     } catch (err: any) {
-      // Prüfe auf den PostgreSQL Error Code für "Unique Violation"
       if (err.code === '23505') {
         showMessage("❌ Teamname schon in Benutzung");
       } else {
@@ -751,13 +788,11 @@ function MeineTeamsContent() {
                     {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
                   </button>
                 ))}
-                {/* PLUS BUTTON: NUR FÜR NEUE TEAMS */}
                 <button onClick={() => handleSelectTeam(null, true)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${isCreating ? "bg-yellow-500/10 text-yellow-500" : "text-gray-500 hover:text-white hover:bg-white/5"}`}>
-                  <span className="text-base leading-none">+</span> Neu
+                  <span className="text-base leading-none">+ Neu</span>
                 </button>
               </div>
 
-              {/* TABS NAVIGATION (ROLE BASED) */}
               {!isCreating && currentTeam && (
                 <div className="flex justify-center gap-4 sm:gap-6 border-b border-white/10 mb-5 px-2">
                   <button onClick={() => setActiveTab("overview")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "overview" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
@@ -834,7 +869,7 @@ function MeineTeamsContent() {
                           <div className="mt-4 flex items-center justify-center gap-2">
                             <div className="bg-purple-500/20 border border-purple-500/40 px-4 py-1.5 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)]">
                               <span className="text-[11px] font-black uppercase tracking-widest text-purple-300">
-                                XP Boost aktiv für <span className="text-white text-sm mx-1">{currentTeam.active_xp_boosts}</span> Spiele
+                                XP Boost active für <span className="text-white text-sm mx-1">{currentTeam.active_xp_boosts}</span> Spiele
                               </span>
                             </div>
                           </div>
@@ -842,7 +877,6 @@ function MeineTeamsContent() {
                       </div>
                     </div>
 
-                    {/* --- STATS GRID BUNT --- */}
                     {(() => {
                       const matchesWon = currentTeam.total_match_wins || 0;
                       const matchesLost = currentTeam.total_match_losses || 0;
@@ -891,7 +925,6 @@ function MeineTeamsContent() {
                     })()}
                   </div>
 
-                  {/* 🔥 NEU: CUSTOM REWARDS / ABZEICHEN ANZEIGE 🔥 */}
                   {currentTeam.team_rewards && currentTeam.team_rewards.some((r:any) => !r.custom_rewards?.type || r.custom_rewards?.type === 'badge') && (
                     <div className="mt-6 border-t border-white/10 pt-5">
                       <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">
@@ -975,7 +1008,8 @@ function MeineTeamsContent() {
                       <p className="text-xs text-gray-400 mt-1">Verwalte hier deine Spieler und Co-Captains.</p>
                     </div>
                     {(currentTeam.myRole === 'captain' || currentTeam.myRole === 'co-captain') && (
-                      <button onClick={() => setShowAddMemberModal(true)} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
+                      /* 🔥 GEÄNDERT: Ruft nun die neue Token-Modal Funktion auf */
+                      <button onClick={handleOpenInviteModal} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
                         + Einladen
                       </button>
                     )}
@@ -1183,7 +1217,6 @@ function MeineTeamsContent() {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
-                    {/* 🔥 ALLE REWARDS SIND JETZT DYNAMISCH (Level-Up & Spezial) 🔥 */}
                     {currentTeam?.team_rewards?.filter((r:any) => r.custom_rewards?.type === cosmeticTab).map((tr:any) => {
                       const reward = tr.custom_rewards;
                       if (!reward) return null;
@@ -1198,7 +1231,6 @@ function MeineTeamsContent() {
                           onClick={() => handleSelectCosmetic(cosmeticTab, reward.value)} 
                           className={`relative border-2 rounded-xl overflow-hidden ${isBanner ? "aspect-[4.8/1]" : "h-20"} w-full flex items-center justify-center transition ${previewSettings.getValue(cosmeticTab) === reward.value ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}
                         >
-                          {/* BANNER RENDER */}
                           {isBanner && reward.image_url && reward.image_url !== 'EMPTY' && (
                             <Image 
                               src={reward.image_url} 
@@ -1209,7 +1241,6 @@ function MeineTeamsContent() {
                             />
                           )}
 
-                          {/* COLOR RENDER (Fallback auf cosmetics.ts) */}
                           {isColor && (
                             reward.image_url && reward.image_url !== 'EMPTY' && reward.image_url !== 'NULL' ? (
                               <Image src={reward.image_url} alt={reward.name} fill className="absolute inset-0 object-cover" />
@@ -1218,7 +1249,6 @@ function MeineTeamsContent() {
                             )
                           )}
 
-                          {/* BORDER RENDER (Fallback auf cosmetics.ts) */}
                           {isBorder && (
                             reward.image_url && reward.image_url !== 'EMPTY' && reward.image_url !== 'NULL' ? (
                               <Image src={reward.image_url} alt={reward.name} fill className="absolute inset-0 object-cover" />
@@ -1230,7 +1260,6 @@ function MeineTeamsContent() {
                       );
                     })}
 
-                    {/* Fallback, falls das Team (noch) nichts für diesen Tab besitzt */}
                     {(!currentTeam?.team_rewards || currentTeam.team_rewards.filter((r:any) => r.custom_rewards?.type === cosmeticTab).length === 0) && (
                       <div className="col-span-full py-8 text-center text-[10px] uppercase tracking-widest text-gray-500 bg-white/5 border border-white/5 rounded-xl">
                         Noch keine Items freigeschaltet
@@ -1238,7 +1267,6 @@ function MeineTeamsContent() {
                     )}
                   </div>
 
-                  {/* 🔥 MOBILE TEAM KARTE VORSCHAU 🔥 */}
                   <div className="lg:hidden mt-4 mb-4 w-full">
                     <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
                     <div className="w-full">
@@ -1308,13 +1336,14 @@ function MeineTeamsContent() {
               <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-6">
                 <h4 className="text-white font-bold mb-2 flex items-center gap-2">🔗 Einladungslink</h4>
                 <p className="text-xs text-gray-400 mb-5 leading-relaxed">
-                  Kopiere diesen Link und schicke ihn deinen Spielern z.B. über Discord. Sie können dem Team dann mit einem Klick beitreten.
+                  Kopiere diesen Link und schicke ihn deinen Spielern z.B. über Discord. Sie können dem Team dann beitreten.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <input 
                     type="text" 
                     readOnly 
-                    value={`https://wombicup.de/invite/${currentTeam.id}`}
+                    /* 🔥 GEÄNDERT: Nutzt nun die verschlüsselte URL aus dem State */
+                    value={inviteUrlState}
                     className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-gray-400 truncate outline-none cursor-copy"
                     onClick={handleCopyInviteLink}
                   />
