@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image"; 
@@ -109,7 +109,7 @@ const getTierStyles = (level: number) => {
   return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
 };
 
-export default function MeineTeamsPage() {
+function MeineTeamsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -544,7 +544,13 @@ export default function MeineTeamsPage() {
       handleSelectTeam(newTeamWithRole, false);
       showMessage("✅ Team erfolgreich erstellt!");
     } catch (err: any) {
-      showMessage("❌ Fehler beim Speichern");
+      // Prüfe auf den PostgreSQL Error Code für "Unique Violation"
+      if (err.code === '23505') {
+        showMessage("❌ Teamname schon in Benutzung");
+      } else {
+        console.error("Speicherfehler:", err);
+        showMessage("❌ Fehler beim Speichern");
+      }
     } finally {
       setSaving(false);
     }
@@ -1384,5 +1390,19 @@ export default function MeineTeamsPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function MeineTeamsPage() {
+  return (
+    <Suspense 
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-white">
+          <div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <MeineTeamsContent />
+    </Suspense>
   );
 }
