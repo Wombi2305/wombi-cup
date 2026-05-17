@@ -34,7 +34,7 @@ export default function ImpressumPage() {
             </div>
             <div>
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">E-Mail</div>
-              <a href="mailto:info@wombicup.de" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">[@wombicup.de]</a>
+              <a href="mailto:info@wombicup.de" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">[noamacklemore@gmail.com]</a>
             </div>
           </div>
           <div className="flex items-center gap-4 bg-white/5 p-4 rounded-xl border border-white/5">
@@ -106,9 +106,9 @@ export default function ImpressumPage() {
           <h2 className="text-lg font-bold uppercase tracking-wider text-gray-200">Angaben gemäß § 5 TMG</h2>
         </div>
         <div className="text-gray-400 leading-relaxed text-sm sm:text-base">
-          <p className="font-bold text-white mb-1">[X] [X]</p>
-          <p>[X] [X]</p>
-          <p>[X] [X]</p>
+          <p className=" text-white mb-1">[Florian] [Unger]</p>
+          <p>[Marburger] [86]</p>
+          <p>[35398] [Giessen]</p>
           <p>Deutschland</p>
         </div>
       </section>

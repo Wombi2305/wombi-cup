@@ -2,15 +2,15 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image"; // 🔥 Der Next.js Image-Booster
+import Image from "next/image"; 
+import TeamCard from "@/components/TeamCard"; 
 
-// 🔥 BILD-KOMPRIMIERUNG HELPER
 const resizeImage = (file: File, maxWidth = 400, maxHeight = 400): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
-      const img = new window.Image(); // Um Konflikte mit next/image zu vermeiden
+      const img = new window.Image(); 
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement("canvas");
@@ -56,7 +56,6 @@ const resizeImage = (file: File, maxWidth = 400, maxHeight = 400): Promise<File>
   });
 };
 
-// 🔥 XP-KURVE HELPER
 const getRequiredXpForLevel = (level: number) => {
   if (level < 11) return Math.floor(50 + (level - 1) * (70 / 9)); 
   if (level < 21) return Math.floor(130 + (level - 11) * (70 / 9));
@@ -69,7 +68,6 @@ const getRequiredXpForLevel = (level: number) => {
   return 700;
 };
 
-// 🔥 SCHLANKE LOGIK FÜR STATS
 const getTeamStatsUI = (team: any) => {
   if (!team) return { level: 1, totalXp: 0, progress: 0, currentLevelXp: 0, requiredLevelXp: 50, tierImage: "/Bronze.png" };
 
@@ -97,7 +95,6 @@ const getTeamStatsUI = (team: any) => {
   return { level, totalXp, progress, currentLevelXp, requiredLevelXp, tierImage };
 };
 
-// 🔥 DYNAMISCHE FARBEN WIE IN DER TURNIERTABELLE
 const getTierStyles = (level: number) => {
   const l = level || 1;
   if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
@@ -126,7 +123,6 @@ export default function MeineTeamsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Modals & Form
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
@@ -136,7 +132,6 @@ export default function MeineTeamsPage() {
   const [captain, setCaptain] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
 
-  // Teammitglieder State
   const [members, setMembers] = useState<any[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -154,22 +149,20 @@ export default function MeineTeamsPage() {
 
       const [profileRes, ownedTeamsRes, memberTeamsRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("id", currentUser.id).single(),
-        supabase.from("teams").select("*").eq("user_id", currentUser.id).eq("is_deleted", false).order("created_at", { ascending: true }),
-        supabase.from("team_members").select("role, teams(*)").eq("user_id", currentUser.id)
+        supabase.from("teams").select("*, team_rewards(id, unlocked_at, custom_rewards(*))").eq("user_id", currentUser.id).eq("is_deleted", false).order("created_at", { ascending: true }),
+        supabase.from("team_members").select("role, teams(*, team_rewards(id, unlocked_at, custom_rewards(*)))").eq("user_id", currentUser.id)
       ]);
 
       if (profileRes.data) setProfile(profileRes.data);
 
       let mergedTeams: any[] = [];
 
-      // Eigene Teams (Immer Rolle 'captain')
       if (ownedTeamsRes.data) {
         ownedTeamsRes.data.forEach(t => {
           mergedTeams.push({ ...t, myRole: 'captain' });
         });
       }
 
-      // Teams, in denen man Mitglied ist
       if (memberTeamsRes.data) {
         memberTeamsRes.data.forEach((mt: any) => {
           const t = mt.teams;
@@ -520,7 +513,7 @@ export default function MeineTeamsPage() {
 
       if (memberError) throw memberError;
       
-      const newTeamWithRole = { ...newTeam, myRole: 'captain' };
+      const newTeamWithRole = { ...newTeam, myRole: 'captain', team_rewards: [] };
       setAllTeams(prev => [...prev, newTeamWithRole]);
       handleSelectTeam(newTeamWithRole, false);
       showMessage("✅ Team erfolgreich erstellt!");
@@ -679,39 +672,23 @@ export default function MeineTeamsPage() {
             {!isCreating && currentTeam && (
               <div className="hidden lg:flex bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex-col relative overflow-hidden transform-gpu">
                 <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
-                <div className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold transition duration-500 relative overflow-hidden ${previewSettings.border} ${previewSettings.bg}`}>
-                  {previewSettings.banner !== 'default' && (
-                    <Image 
-                      src={`/rewards/banner_${previewSettings.banner}.png`} 
-                      alt="Banner" 
-                      width={400}
-                      height={100}
-                      className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" 
-                    />
-                  )}
-                  <div className="relative z-10 flex items-center gap-3 w-full">
-                    {logoUrl ? (
-                      <Image 
-                        src={logoUrl} 
-                        alt="Team Logo Preview" 
-                        width={32}
-                        height={32}
-                        className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
-                      />
-                    ) : (
-                      <Image 
-                        src={teamStats.tierImage} 
-                        alt="Rank" 
-                        width={32}
-                        height={32}
-                        className="w-8 h-8 object-contain shrink-0" 
-                      />
-                    )}
-                    <span className={`whitespace-nowrap truncate tracking-tight transition-colors duration-500 ${previewSettings.colorClass}`}>
-                      {teamname || "Teamname"}
-                    </span>
-                  </div>
+                
+                {/* 🔥 HIER WIRD DIE TEAMCARD KOMPONENTE GENUTZT */}
+                <div className="w-full">
+                  <TeamCard 
+                    team={{
+                      level: teamStats.level,
+                      teamname: teamname || "Teamname",
+                      logo_url: logoUrl,
+                      equipped_banner: previewSettings.getValue('banner'),
+                      equipped_color: previewSettings.getValue('color'),
+                      equipped_border: previewSettings.getValue('border'),
+                      equipped_background: previewSettings.getValue('background'),
+                      team_rewards: currentTeam?.team_rewards || []
+                    }} 
+                  />
                 </div>
+
               </div>
             )}
           </div>
@@ -882,6 +859,47 @@ export default function MeineTeamsPage() {
                       );
                     })()}
                   </div>
+
+                  {/* 🔥 NEU: CUSTOM REWARDS / ABZEICHEN ANZEIGE 🔥 */}
+                  {currentTeam.team_rewards && currentTeam.team_rewards.some((r:any) => !r.custom_rewards?.type || r.custom_rewards?.type === 'badge') && (
+                    <div className="mt-6 border-t border-white/10 pt-5">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">
+                        Freigeschaltete Abzeichen & Erfolge
+                      </h4>
+                      <div className="flex flex-wrap gap-3">
+                        {currentTeam.team_rewards.filter((r:any) => !r.custom_rewards?.type || r.custom_rewards?.type === 'badge').map((tr: any) => {
+                          const reward = tr.custom_rewards;
+                          if (!reward) return null;
+
+                          return (
+                            <div 
+                              key={tr.id} 
+                              className="group relative flex items-center justify-center w-14 h-14 bg-white/5 border border-white/10 hover:border-yellow-500/50 rounded-xl transition-all hover:bg-white/10 cursor-help"
+                            >
+                              <Image 
+                                src={reward.image_url || "/rewards/default_badge.png"} 
+                                alt={reward.name}
+                                width={44}
+                                height={44}
+                                className="object-contain drop-shadow-lg group-hover:scale-110 transition-transform duration-300 w-11 h-11"
+                              />
+
+                              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50 w-48">
+                                <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-lg p-2 text-center shadow-xl">
+                                  <p className="text-yellow-400 font-bold text-xs">{reward.name}</p>
+                                  <p className="text-gray-300 text-[10px] mt-1 leading-tight">{reward.description}</p>
+                                  <p className="text-gray-600 text-[8px] mt-1.5 uppercase tracking-widest border-t border-white/10 pt-1">
+                                    Erreicht am: {new Date(tr.unlocked_at).toLocaleDateString('de-DE')}
+                                  </p>
+                                </div>
+                                <div className="w-2 h-2 bg-black/90 border-r border-b border-white/10 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2"></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {currentTeam.myRole !== 'spieler' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1136,7 +1154,7 @@ export default function MeineTeamsPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
                     {cosmeticTab === "banner" && (
                       <>
-                        <button disabled={teamStats.level < 8} onClick={() => handleSelectCosmetic('banner', '0')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 8 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '0' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
+                        <button disabled={teamStats.level < 8} onClick={() => handleSelectCosmetic('banner', '0')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 8 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '0' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
                           <Image 
                             src="/rewards/banner_0.png" 
                             alt="Basic Banner" 
@@ -1151,7 +1169,7 @@ export default function MeineTeamsPage() {
                           )}
                         </button>
                         
-                        <button disabled={teamStats.level < 22} onClick={() => handleSelectCosmetic('banner', '1')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 22 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
+                        <button disabled={teamStats.level < 22} onClick={() => handleSelectCosmetic('banner', '1')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 22 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
                           <Image 
                             src="/rewards/banner_1.png" 
                             alt="Upgraded Banner" 
@@ -1166,7 +1184,7 @@ export default function MeineTeamsPage() {
                           )}
                         </button>
                         
-                        <button disabled={teamStats.level < 39} onClick={() => handleSelectCosmetic('banner', '2')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 39 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '2' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
+                        <button disabled={teamStats.level < 39} onClick={() => handleSelectCosmetic('banner', '2')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 39 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '2' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
                           <Image 
                             src="/rewards/banner_2.png" 
                             alt="Elite Banner" 
@@ -1181,7 +1199,7 @@ export default function MeineTeamsPage() {
                           )}
                         </button>
 
-                        <button disabled={teamStats.level < 47} onClick={() => handleSelectCosmetic('banner', '3')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 47 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '3' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
+                        <button disabled={teamStats.level < 47} onClick={() => handleSelectCosmetic('banner', '3')} className={`relative border-2 rounded-xl overflow-hidden aspect-[4.8/1] w-full flex items-center justify-center transition ${teamStats.level < 47 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('banner') === '3' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
                           <Image 
                             src="/rewards/banner_3.png" 
                             alt="Special Banner" 
@@ -1198,7 +1216,7 @@ export default function MeineTeamsPage() {
                       </>
                     )}
                     {cosmeticTab === "color" && (
-                      <button disabled={teamStats.level < 14} onClick={() => handleSelectCosmetic('color', '1')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 14 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('color') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
+                      <button disabled={teamStats.level < 14} onClick={() => handleSelectCosmetic('color', '1')} className={`relative border-2 rounded-xl overflow-hidden h-20 w-full flex items-center justify-center transition ${teamStats.level < 14 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('color') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
                         <div className="absolute inset-0 w-full h-full bg-gradient-to-tr from-purple-500 to-blue-500"></div>
                         {teamStats.level < 14 && (
                           <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
@@ -1208,7 +1226,7 @@ export default function MeineTeamsPage() {
                       </button>
                     )}
                     {cosmeticTab === "border" && (
-                      <button disabled={teamStats.level < 40} onClick={() => handleSelectCosmetic('border', '1')} className={`relative border-2 rounded-xl overflow-hidden h-24 sm:h-28 w-full flex items-center justify-center transition ${teamStats.level < 40 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('border') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
+                      <button disabled={teamStats.level < 40} onClick={() => handleSelectCosmetic('border', '1')} className={`relative border-2 rounded-xl overflow-hidden h-20 w-full flex items-center justify-center transition ${teamStats.level < 40 ? 'opacity-40 cursor-not-allowed border-white/5' : previewSettings.getValue('border') === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}>
                         <div className="absolute inset-0 w-full h-full bg-white/5 border-[3px] border-yellow-500"></div>
                         {teamStats.level < 40 && (
                           <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
@@ -1217,42 +1235,51 @@ export default function MeineTeamsPage() {
                         )}
                       </button>
                     )}
+
+                    {/* 🔥 DYNAMISCHE CUSTOM REWARDS (BANNER/FARBEN/RAHMEN) 🔥 */}
+                    {currentTeam?.team_rewards?.filter((r:any) => r.custom_rewards?.type === cosmeticTab).map((tr:any) => {
+                      const reward = tr.custom_rewards;
+                      return (
+                        <button 
+                          key={tr.id}
+                          onClick={() => handleSelectCosmetic(cosmeticTab, reward.value)} 
+                          className={`relative border-2 rounded-xl overflow-hidden ${cosmeticTab === "banner" ? "aspect-[4.8/1]" : "h-20"} w-full flex items-center justify-center transition ${previewSettings.getValue(cosmeticTab) === reward.value ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}
+                          title={reward.name}
+                        >
+                          <Image 
+                            src={reward.image_url} 
+                            alt={reward.name} 
+                            fill
+                            sizes="(max-width: 768px) 50vw, 25vw"
+                            className="absolute inset-0 object-cover" 
+                          />
+                          <div className="absolute top-1 right-1 bg-black/60 rounded px-1.5 py-0.5 z-10">
+                            <span className="text-[8px] font-black uppercase text-yellow-500 tracking-widest">Spezial</span>
+                          </div>
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity z-0">
+                            <span className="text-[10px] font-black uppercase text-white p-2 text-center drop-shadow-md">{reward.name}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
 
-                  <div className="lg:hidden mt-4 mb-4">
+                  {/* 🔥 MOBILE TEAM KARTE VORSCHAU 🔥 */}
+                  <div className="lg:hidden mt-4 mb-4 w-full">
                     <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
-                    <div className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold transition duration-500 relative overflow-hidden ${previewSettings.border} ${previewSettings.bg}`}>
-                      {previewSettings.banner !== 'default' && (
-                        <Image 
-                          src={`/rewards/banner_${previewSettings.banner}.png`} 
-                          alt="" 
-                          width={400}
-                          height={100}
-                          className="absolute inset-0 w-full h-full object-cover object-center scale-[1.05] pointer-events-none" 
-                        />
-                      )}
-                      <div className="relative z-10 flex items-center gap-3 w-full">
-                        {logoUrl ? (
-                          <Image 
-                            src={logoUrl} 
-                            alt="Logo" 
-                            width={32}
-                            height={32}
-                            className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
-                            loading="lazy" 
-                            decoding="async" 
-                          />
-                        ) : (
-                          <Image 
-                            src={teamStats.tierImage} 
-                            alt="Rank" 
-                            width={32}
-                            height={32}
-                            className="w-8 h-8 object-contain shrink-0" 
-                          />
-                        )}
-                        <span className={`whitespace-nowrap truncate tracking-tight transition-colors duration-500 ${previewSettings.colorClass}`}>{teamname || "Teamname"}</span>
-                      </div>
+                    <div className="w-full">
+                      <TeamCard 
+                        team={{
+                          level: teamStats.level,
+                          teamname: teamname || "Teamname",
+                          logo_url: logoUrl,
+                          equipped_banner: previewSettings.getValue('banner'),
+                          equipped_color: previewSettings.getValue('color'),
+                          equipped_border: previewSettings.getValue('border'),
+                          equipped_background: previewSettings.getValue('background'),
+                          team_rewards: currentTeam?.team_rewards || []
+                        }} 
+                      />
                     </div>
                   </div>
 

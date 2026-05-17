@@ -1,111 +1,8 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image"; 
-
-// 🔥 HELPER: Holt das passende Bild
-const getTierImage = (level: number) => {
-  const l = level || 1;
-  if (l >= 45) return "/Prisma.png";
-  if (l >= 40) return "/Amethyst.png";
-  if (l >= 35) return "/Sapphire.png";
-  if (l >= 30) return "/Emerald.png";
-  if (l >= 25) return "/Ruby.png";
-  if (l >= 20) return "/Gold.png";
-  if (l >= 10) return "/Silber.png";
-  return "/Bronze.png";
-};
-
-// 🔥 HELPER: Holt die passende Farbe
-const getTierStyles = (level: number) => {
-  const l = level || 1;
-  if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
-  if (l >= 40) return { bg: "bg-purple-500/20", border: "border-purple-500/40", text: "text-purple-50" };
-  if (l >= 35) return { bg: "bg-blue-500/20", border: "border-blue-500/40", text: "text-blue-50" };
-  if (l >= 30) return { bg: "bg-emerald-500/20", border: "border-emerald-500/40", text: "text-emerald-50" };
-  if (l >= 25) return { bg: "bg-red-500/20", border: "border-red-500/40", text: "text-red-50" };
-  if (l >= 20) return { bg: "bg-yellow-500/20", border: "border-yellow-500/40", text: "text-yellow-50" };
-  if (l >= 10) return { bg: "bg-slate-400/20", border: "border-slate-400/40", text: "text-slate-50" };
-  return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
-};
-
-// 🔥 DIE UNIVERSELLE TEAM-CARD (Optimiert mit next/image) 🔥
-const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, isWinner = false }: { team?: any, isDu?: boolean, reverseOnMobile?: boolean, isTBD?: boolean, isWinner?: boolean }) => {
-  if (!team || isTBD) {
-    return (
-      <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} border border-white/5 bg-white/5 rounded-md px-3 py-1.5 text-sm font-bold flex-1 min-w-0 text-gray-500 italic`}>
-        <span className="truncate">TBD</span>
-      </div>
-    );
-  }
-
-  const tierStyles = getTierStyles(team.level);
-  
-  const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : tierStyles.border;
-  const banner = team.equipped_banner;
-  const bg = banner && banner !== 'default' 
-    ? 'bg-black/60' 
-    : team.equipped_background === '1' 
-      ? 'bg-gradient-to-br from-yellow-900/40 to-black' 
-      : tierStyles.bg;
-  const textColor = team.equipped_color === '1' 
-    ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' 
-    : tierStyles.text;
-
-  return (
-    <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
-      {banner && banner !== 'default' && (
-        <Image 
-          src={`/rewards/banner_${banner}.png`} 
-          alt="Banner" 
-          fill
-          sizes="(max-width: 768px) 100vw, 300px"
-          className="absolute inset-0 object-cover object-center scale-[1.05] pointer-events-none"
-          onError={(e) => e.currentTarget.style.display = 'none'} 
-        />
-      )}
-      <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
-        {team.logo_url ? (
-          <Image 
-            src={team.logo_url} 
-            alt="Logo" 
-            width={32} 
-            height={32} 
-            className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
-          />
-        ) : (
-          <Image 
-            src={getTierImage(team.level)} 
-            alt="Rank" 
-            width={32} 
-            height={32} 
-            className="w-8 h-8 object-contain shrink-0" 
-          />
-        )}
-      
-        <span className={`
-          min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none
-          tracking-tight transition-colors duration-500
-          text-[clamp(10px,1vw,16px)]
-          ${textColor}
-        `}
-        style={{
-          fontSize: "clamp(10px, 1vw, 16px)",
-        }}
-      >
-        {team.name || team.teamname}
-
-        {isDu && (
-          <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
-            (Du)
-          </span>
-        )}
-      </span>
-      </div>
-    </div>
-  );
-};
+import TeamCard from "@/components/TeamCard";
 
 interface KoPhaseProps {
   matches: any[];
@@ -117,7 +14,7 @@ interface KoPhaseProps {
 export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) {
 
   // ===============================
-  // STATES
+  // STATES & REFS
   // ===============================
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [scores, setScores] = useState<any>({});
@@ -125,11 +22,53 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   const [localMatches, setLocalMatches] = useState<any[]>(matches);
   const [myTeamRoles, setMyTeamRoles] = useState<any[]>([]); 
   
+  const [enrichedTeams, setEnrichedTeams] = useState<any[]>(teams);
+  
   const [activeMobileRound, setActiveMobileRound] = useState<number | null>(null);
+
+  // 🔥 NEU: Referenz für den Scroll-Container (für die Pfeile)
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLocalMatches(matches);
   }, [matches]);
+
+  useEffect(() => {
+    const enrichTeamData = async () => {
+      if (!teams || teams.length === 0) return;
+
+      if (teams[0]?.team_rewards) {
+        setEnrichedTeams(teams);
+        return;
+      }
+
+      try {
+        const teamIds = teams.map((t) => t.id);
+        
+        const { data: rewardsData, error } = await supabase
+          .from("team_rewards")
+          .select("*, custom_rewards(*)")
+          .in("team_id", teamIds);
+
+        if (error) throw error;
+
+        const updatedTeams = teams.map((team) => {
+          const teamRewards = rewardsData?.filter((r) => r.team_id === team.id) || [];
+          return {
+            ...team,
+            team_rewards: teamRewards,
+          };
+        });
+
+        setEnrichedTeams(updatedTeams);
+      } catch (err) {
+        console.error("Fehler beim Nachladen der K.O.-Phasen Cosmetics:", err);
+        setEnrichedTeams(teams);
+      }
+    };
+
+    enrichTeamData();
+  }, [teams]);
 
   useEffect(() => {
     const fetchRoles = async () => {
@@ -150,17 +89,17 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
   const myManageableTeamIds = useMemo(() => {
     if (!user) return [];
-    const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
+    const owned = enrichedTeams.filter(t => t.user_id === user.id).map(t => t.id);
     const coCaptains = myTeamRoles.filter(r => r.role === 'captain' || r.role === 'co-captain').map(r => r.team_id);
     return Array.from(new Set([...owned, ...coCaptains]));
-  }, [teams, user, myTeamRoles]);
+  }, [enrichedTeams, user, myTeamRoles]);
 
   const myAllTeamIds = useMemo(() => {
     if (!user) return [];
-    const owned = teams.filter(t => t.user_id === user.id).map(t => t.id);
+    const owned = enrichedTeams.filter(t => t.user_id === user.id).map(t => t.id);
     const member = myTeamRoles.map(r => r.team_id);
     return Array.from(new Set([...owned, ...member]));
-  }, [teams, user, myTeamRoles]);
+  }, [enrichedTeams, user, myTeamRoles]);
 
   const koMatches = useMemo(() => {
     return localMatches.filter((m) => m.match_type === "ko");
@@ -168,11 +107,11 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
 
   const teamMap = useMemo(() => {
     const map: any = {};
-    teams.forEach((t) => {
+    enrichedTeams.forEach((t) => {
       map[t.id] = t;
     });
     return map;
-  }, [teams]);
+  }, [enrichedTeams]);
 
   const expectedRounds = useMemo(() => {
     const startSize =
@@ -291,8 +230,21 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     await supabase.from("matches").update({ score1: null, score2: null, status: "rejected", reported_by: null }).eq("id", matchId);
   };
 
+  // 🔥 NEU: Scroll Funktionen für die Pfeile
+  const scrollLeft = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: -350, behavior: 'smooth' });
+    }
+  };
+
+  const scrollRight = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: 350, behavior: 'smooth' });
+    }
+  };
+
   return (
-    <div className="mt-6 w-full">
+    <div className="mt-6 w-full relative">
 
       {/* --- BUTTON OBEN --- */}
       {activeUserMatch && (
@@ -364,66 +316,97 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
       {/* ===============================
           🔥 DESKTOP ANSICHT
       =============================== */}
-      <div className="hidden md:block w-full overflow-x-auto pb-12 pt-6">
-        <div className="flex min-w-max items-stretch min-h-[400px]">
-          {expectedRounds.map((round, colIndex) => {
-            const roundMatches = koMatches
-              .filter((m) => m.ko_round === round)
-              .sort((a, b) => a.id - b.id);
+      <div className="hidden md:block w-full pt-6 relative group">
+        
+        {/* 🔥 NEU: PFEIL NAVIGATION */}
+        <div className="absolute right-0 top-0 flex gap-2 z-20 bg-[#0a0a0a] pl-4 pb-2">
+          <button 
+            onClick={scrollLeft} 
+            className="w-10 h-10 rounded-xl bg-white/5 hover:bg-yellow-500 text-gray-400 hover:text-black border border-white/10 hover:border-yellow-500 transition-all flex items-center justify-center font-bold text-lg shadow-sm"
+          >
+            ←
+          </button>
+          <button 
+            onClick={scrollRight} 
+            className="w-10 h-10 rounded-xl bg-white/5 hover:bg-yellow-500 text-gray-400 hover:text-black border border-white/10 hover:border-yellow-500 transition-all flex items-center justify-center font-bold text-lg shadow-sm"
+          >
+            →
+          </button>
+        </div>
 
-            return (
-              <div key={round} className="flex flex-col w-[300px] shrink-0">
-                <div className="text-center pb-2 border-b border-yellow-500/30 mb-2 mx-6">
-                  <h3 className="text-yellow-400 font-bold uppercase text-sm tracking-widest">{getRoundName(round)}</h3>
-                </div>
+        {/* 🔥 HIER GEÄNDERT: scrollbar-hide hinzugefügt und ref gesetzt */}
+        <div 
+          ref={scrollContainerRef} 
+          className="w-full overflow-x-auto pb-12 scrollbar-hide scroll-smooth"
+        >
+          <div className="flex min-w-max items-stretch min-h-[400px]">
+            {expectedRounds.map((round, colIndex) => {
+              const roundMatches = koMatches
+                .filter((m) => m.ko_round === round)
+                .sort((a, b) => a.id - b.id);
 
-                <div className="flex flex-col flex-1">
-                  {roundMatches.map((m: any, i: number) => {
-                    const team1 = teamMap[m.team1_id];
-                    const team2 = teamMap[m.team2_id];
-                    const isConfirmed = m.status === "confirmed";
-                    const team1Wins = isConfirmed && m.score1 !== null && m.score2 !== null && m.score1 > m.score2;
-                    const team2Wins = isConfirmed && m.score1 !== null && m.score2 !== null && m.score2 > m.score1;
+              return (
+                <div key={round} className="flex flex-col shrink-0 transition-all duration-300 w-[355px]">
+                  <div className="text-center pb-2 border-b border-yellow-500/30 mb-2 mx-6">
+                    <h3 className="text-yellow-400 font-bold uppercase tracking-widest transition-all duration-300 text-sm">
+                      {getRoundName(round)}
+                    </h3>
+                  </div>
 
-                    return (
-                      <div key={m.id} className="flex-1 flex flex-col justify-center relative px-6 py-3">
-                        {colIndex > 0 && <div className="absolute left-0 top-1/2 w-6 h-[2px] bg-white/10 -translate-y-1/2" />}
-                        {colIndex < expectedRounds.length - 1 && (
-                          <>
-                            <div className="absolute right-0 top-1/2 w-6 h-[2px] bg-white/10 -translate-y-1/2" />
-                            {i % 2 === 0 ? (
-                              <div className="absolute right-0 top-1/2 bottom-0 w-[2px] bg-white/10" />
-                            ) : (
-                              <div className="absolute right-0 top-0 bottom-1/2 w-[2px] bg-white/10" />
-                            )}
-                          </>
-                        )}
+                  <div className="flex flex-col flex-1">
+                    {roundMatches.map((m: any, i: number) => {
+                      const team1 = teamMap[m.team1_id];
+                      const team2 = teamMap[m.team2_id];
+                      const isConfirmed = m.status === "confirmed";
+                      const team1Wins = isConfirmed && m.score1 !== null && m.score2 !== null && m.score1 > m.score2;
+                      const team2Wins = isConfirmed && m.score1 !== null && m.score2 !== null && m.score2 > m.score1;
 
-                        <div className="flex flex-col bg-black/60 border rounded-xl border-white/10 relative z-10 w-full shadow-lg p-1.5 gap-1.5 transition-transform hover:scale-[1.02]">
-                          
-                          {/* TEAM 1 */}
-                          <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team1Wins ? 'opacity-40' : ''}`}>
-                            <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && round === 2} isDu={myAllTeamIds.includes(m.team1_id)} />
-                            <div className="w-10 text-center font-black text-lg shrink-0">
-                              <span className={isConfirmed ? (team1Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score1 ?? "-"}</span>
+                      return (
+                        <div key={m.id} className="flex-1 flex flex-col justify-center relative px-4 py-3">
+                          {colIndex > 0 && <div className="absolute left-0 top-1/2 w-4 h-[2px] bg-white/10 -translate-y-1/2" />}
+                          {colIndex < expectedRounds.length - 1 && (
+                            <>
+                              <div className="absolute right-0 top-1/2 w-4 h-[2px] bg-white/10 -translate-y-1/2" />
+                              {i % 2 === 0 ? (
+                                <div className="absolute right-0 top-1/2 bottom-0 w-[2px] bg-white/10" />
+                              ) : (
+                                <div className="absolute right-0 top-0 bottom-1/2 w-[2px] bg-white/10" />
+                              )}
+                            </>
+                          )}
+
+                          <div className="flex flex-col bg-black/60 border rounded-xl border-white/10 relative z-10 w-full shadow-lg p-1.5 gap-1.5 hover:scale-[1.02] transition-transform duration-200">
+                            
+                            {/* TEAM 1 */}
+                            <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team1Wins ? 'opacity-40' : ''}`}>
+                              <div className="flex-1 w-full">
+                                <TeamCard team={team1} isTBD={!team1} isWinner={team1Wins && round === 2} isDu={myAllTeamIds.includes(m.team1_id)} />
+                              </div>
+                              
+                              <div className="w-10 text-center font-black shrink-0 text-lg">
+                                <span className={isConfirmed ? (team1Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score1 ?? "-"}</span>
+                              </div>
                             </div>
-                          </div>
 
-                          {/* TEAM 2 */}
-                          <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team2Wins ? 'opacity-40' : ''}`}>
-                            <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && round === 2} isDu={myAllTeamIds.includes(m.team2_id)} />
-                            <div className="w-10 text-center font-black text-lg shrink-0">
-                              <span className={isConfirmed ? (team2Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score2 ?? "-"}</span>
+                            {/* TEAM 2 */}
+                            <div className={`flex justify-between items-center transition-opacity ${isConfirmed && !team2Wins ? 'opacity-40' : ''}`}>
+                              <div className="flex-1 w-full">
+                                <TeamCard team={team2} isTBD={!team2} isWinner={team2Wins && round === 2} isDu={myAllTeamIds.includes(m.team2_id)} />
+                              </div>
+
+                              <div className="w-10 text-center font-black shrink-0 text-lg">
+                                <span className={isConfirmed ? (team2Wins ? "text-green-400" : "text-gray-500") : "text-gray-500"}>{m.score2 ?? "-"}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 

@@ -4,94 +4,7 @@ import { useEffect, useState, Fragment, useMemo, useRef, Suspense } from "react"
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
-
-// 🔥 HELPER: Holt das passende Bild
-const getTierImage = (level: number) => {
-  const l = level || 1;
-  if (l >= 45) return "/Prisma.png";
-  if (l >= 40) return "/Amethyst.png";
-  if (l >= 35) return "/Sapphire.png";
-  if (l >= 30) return "/Emerald.png";
-  if (l >= 25) return "/Ruby.png";
-  if (l >= 20) return "/Gold.png";
-  if (l >= 10) return "/Silber.png";
-  return "/Bronze.png";
-};
-
-// 🔥 HELPER: Holt die passende Farbe
-const getTierStyles = (level: number) => {
-  const l = level || 1;
-  if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
-  if (l >= 40) return { bg: "bg-purple-500/20", border: "border-purple-500/40", text: "text-purple-50" };
-  if (l >= 35) return { bg: "bg-blue-500/20", border: "border-blue-500/40", text: "text-blue-50" };
-  if (l >= 30) return { bg: "bg-emerald-500/20", border: "border-emerald-500/40", text: "text-emerald-50" };
-  if (l >= 25) return { bg: "bg-red-500/20", border: "border-red-500/40", text: "text-red-50" };
-  if (l >= 20) return { bg: "bg-yellow-500/20", border: "border-yellow-500/40", text: "text-yellow-50" };
-  if (l >= 10) return { bg: "bg-slate-400/20", border: "border-slate-400/40", text: "text-slate-50" };
-  return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
-};
-
-// 🔥 Die universelle TeamCard inkl. Cosmetics
-const TeamCard = ({ team, isDu = false, reverseOnMobile = false }: { team: any, isDu?: boolean, reverseOnMobile?: boolean }) => {
-  if (!team) return <div className="flex-1" />;
-
-  const tierStyles = getTierStyles(team.level);
-  const border = team.equipped_border === '1' ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : tierStyles.border;
-  const banner = team.equipped_banner;
-  const bg = banner && banner !== 'default' 
-    ? 'bg-black/60' 
-    : team.equipped_background === '1' 
-      ? 'bg-gradient-to-br from-yellow-900/40 to-black' 
-      : tierStyles.bg;
-  const textColor = team.equipped_color === '1' 
-    ? 'text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400' 
-    : tierStyles.text;
-
-  return (
-    <div className={`flex items-center ${reverseOnMobile ? 'justify-end flex-row-reverse sm:flex-row sm:justify-start' : 'justify-start'} gap-3 px-3 py-1.5 rounded-md border text-sm md:text-base font-bold flex-1 min-w-0 transition-all duration-500 relative overflow-hidden ${border} ${bg}`}>
-      {banner && banner !== 'default' && (
-        <Image 
-          src={`/rewards/banner_${banner}.png`} 
-          alt="Banner" 
-          fill
-          sizes="(max-width: 768px) 100vw, 300px"
-          className="absolute inset-0 object-cover object-center scale-[1.05] pointer-events-none"
-        />
-      )}
-      <div className={`relative z-10 flex items-center gap-3 min-w-0 w-full ${reverseOnMobile ? 'flex-row-reverse sm:flex-row' : ''}`}>
-        {team.logo_url ? (
-          <Image 
-            src={team.logo_url} 
-            alt="Logo" 
-            width={32} 
-            height={32} 
-            className="w-8 h-8 rounded-full object-cover shrink-0 border border-white/20 bg-black/40 shadow-sm" 
-          />
-        ) : (
-          <Image 
-            src={getTierImage(team.level)} 
-            alt="Rank" 
-            width={32} 
-            height={32} 
-            className="w-8 h-8 object-contain shrink-0" 
-          />
-        )}
-        <span
-          className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap leading-none tracking-tight transition-colors duration-500 text-[clamp(10px,1vw,16px)] ${textColor}`}
-          style={{ fontSize: "clamp(10px, 1vw, 16px)" }}
-        >
-          {team.name || team.teamname}
-         {isDu && (
-           <span className="ml-1.5 opacity-60 font-medium text-[10px] uppercase tracking-wider">
-             (Du)
-           </span>
-          )}
-        </span>
-      </div>
-    </div>
-  );
-};
+import TeamCard from "@/components/TeamCard";
 
 function TurnierTabelleContent() {
   const router = useRouter();
@@ -150,40 +63,18 @@ function TurnierTabelleContent() {
     );
   }, [matches, myManageableTeamIds, user]);
 
-  // 🔥 AKTUALISIERTE LOGIK: Prüft den Fortschritt der gesamten Gruppe
   const actionableRounds = useMemo(() => {
     if (!matches || matches.length === 0 || !userMatches || userMatches.length === 0) return [];
-
-    // 1. Alle Gruppen finden, in denen der User Teams hat
     const userGroups = Array.from(new Set(userMatches.map(m => m.group_name)));
-
-    // 2. Alle Matches dieser Gruppen holen
-    const relevantGroupMatches = matches.filter(m => 
-      m.match_type !== "ko" && userGroups.includes(m.group_name)
-    );
-
-    // 3. Chronologisch sortieren
+    const relevantGroupMatches = matches.filter(m => m.match_type !== "ko" && userGroups.includes(m.group_name));
     const sortedMatches = [...relevantGroupMatches].sort((a, b) => a.round - b.round);
-
-    // 4. Erstes unbestätigtes Spiel in der Gruppe finden
     const firstUnconfirmedGlobal = sortedMatches.find(m => m.status !== "confirmed");
 
     if (firstUnconfirmedGlobal) {
-        // Falls dieses unbestätigte Spiel EINES MEINER Teams betrifft, zeige diesen Spieltag
-        // ODER: Wenn ich in diesem Spieltag noch etwas zu tun habe
         const myOpenMatchInThisRound = userMatches.find(m => m.round === firstUnconfirmedGlobal.round && m.status !== "confirmed");
-        
-        if (myOpenMatchInThisRound) {
-            return [firstUnconfirmedGlobal.round];
-        } else {
-            // Wenn mein Spiel in dieser Runde schon fertig ist, aber andere noch fehlen:
-            // Wir zeigen die nächste Runde an, in der ICH wieder aktiv werden muss,
-            // aber blockieren den Fortschritt, falls du das willst. 
-            // Hier: Wir zeigen erst die nächste MEINER Runden, wenn die globale Runde davor abgeschlossen ist.
-            return []; 
-        }
+        if (myOpenMatchInThisRound) return [firstUnconfirmedGlobal.round];
+        else return []; 
     }
-
     return [];
   }, [matches, userMatches]);
 
@@ -204,6 +95,7 @@ function TurnierTabelleContent() {
         id: team.id, name: team.teamname, level: team.level, logo_url: team.logo_url, 
         equipped_banner: team.equipped_banner, equipped_color: team.equipped_color,
         equipped_border: team.equipped_border, equipped_background: team.equipped_background,
+        team_rewards: team.team_rewards,
         sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 
       };
     });
@@ -295,12 +187,27 @@ function TurnierTabelleContent() {
 
   const fetchData = async (isBackground = false) => {
     if (!isBackground && !isReady) setLoadingData(true);
-    const { data: regData } = await supabase.from("tournament_registrations").select("teams(*)").eq("tournament_id", selectedTournament).eq("status", "approved"); 
+    
+    const { data: regData } = await supabase.from("tournament_registrations")
+      .select(`
+        *,
+        teams (
+          *,
+          team_rewards (
+            *,
+            custom_rewards (*)
+          )
+        )
+      `)
+      .eq("tournament_id", selectedTournament)
+      .eq("status", "approved"); 
+    
     const { data: m } = await supabase.from("matches").select("*").eq("tournament_id", selectedTournament);
     const { data: g } = await supabase.from("group_assignments").select("*").eq("tournament_id", selectedTournament);
+    
     let extractedTeams: any[] = [];
     if (regData) {
-      extractedTeams = regData.map((r: any) => r.teams).filter(Boolean);
+      extractedTeams = regData.map((r: any) => Array.isArray(r.teams) ? r.teams[0] : r.teams).filter(Boolean);
       setTeams(extractedTeams);
     }
     if (m) setMatches(m);
@@ -388,24 +295,47 @@ function TurnierTabelleContent() {
               const table = currentTables[groupName] || [];
               return (
                 <Fragment key={groupName}>
-                  <div className="border border-yellow-500/30 rounded-xl p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] overflow-hidden">
-                    <div className="mb-3 border-b border-yellow-500/30 pb-2">
+                  <div className="border border-yellow-500/30 rounded-xl p-2 sm:p-4 shadow-2xl bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] overflow-hidden">
+                    <div className="mb-3 border-b border-yellow-500/30 pb-2 ml-2 sm:ml-0">
                       <span className="text-yellow-400 font-bold uppercase tracking-widest text-sm italic">Gruppe {groupName}</span>
                     </div>
-                    <div className="w-full overflow-x-auto pb-2">
-                      <div className="min-w-[340px]">
-                        <div className="grid grid-cols-12 text-[10px] md:text-xs uppercase text-gray-400 mb-2 px-1 text-center font-bold italic">
-                          <span>#</span><span>Pkt</span><span className="text-left col-span-5">Team</span><span>Sp</span><span>G</span><span>U</span><span>V</span><span className="text-yellow-400">TG</span>
+                    
+                    <div className="w-full pb-1">
+                      <div className="w-full">
+                        
+                        {/* 🔥 HIER GEFIXT: Intelligentes 1fr-Grid anstatt 12 Spalten */}
+                        <div className="grid grid-cols-[20px_25px_1fr_20px_20px_20px_20px_35px] md:grid-cols-[30px_40px_1fr_30px_30px_30px_30px_50px] gap-1 sm:gap-2 text-[9px] md:text-xs uppercase text-gray-400 mb-2 px-1 text-center font-bold italic items-center">
+                          <span>#</span>
+                          <span>Pkt</span>
+                          <span className="text-left pl-1 sm:pl-2">Team</span>
+                          <span>Sp</span>
+                          <span>G</span>
+                          <span>U</span>
+                          <span>V</span>
+                          <span className="text-yellow-400">TG</span>
                         </div>
+                        
                         {table.map((team: any, i: number) => {
                           const isTop = i < tournamentStyle.top_places;
                           const isBottom = i >= table.length - tournamentStyle.bottom_places;
                           return (
-                            <div key={team.id} style={{ background: isTop ? tournamentStyle.color_top + "20" : isBottom ? tournamentStyle.color_bottom + "20" : tournamentStyle.color_middle + "20", borderLeft: `4px solid ${isTop ? tournamentStyle.color_top : isBottom ? tournamentStyle.color_bottom : tournamentStyle.color_middle}` }} className="grid grid-cols-12 text-xs md:text-sm py-2 border-b border-white/5 items-center text-center transition-colors hover:bg-white/5">
-                              <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-lg md:text-xl" : "text-yellow-400 text-base md:text-xl"}`}>{i + 1}</span>
-                              <span className="text-white/90 font-bold text-sm">{team.pkt}</span>
-                              <div className="col-span-5 flex items-center justify-start pr-2"><TeamCard team={team} isDu={myAllTeamIds.includes(team.id)} /></div>
-                              <span>{team.sp}</span><span className="text-green-400 font-bold">{team.g}</span><span>{team.u}</span><span>{team.v}</span><span className="font-bold text-yellow-400 text-sm">{team.tore}:{team.gegentore}</span>
+                            // 🔥 HIER GEFIXT: Das gleiche intelligente Grid für die Reihen
+                            <div key={team.id} style={{ background: isTop ? tournamentStyle.color_top + "20" : isBottom ? tournamentStyle.color_bottom + "20" : tournamentStyle.color_middle + "20", borderLeft: `4px solid ${isTop ? tournamentStyle.color_top : isBottom ? tournamentStyle.color_bottom : tournamentStyle.color_middle}` }} className="grid grid-cols-[20px_25px_1fr_20px_20px_20px_20px_35px] md:grid-cols-[30px_40px_1fr_30px_30px_30px_30px_50px] gap-1 sm:gap-2 text-[10px] md:text-sm py-2 border-b border-white/5 items-center text-center transition-colors hover:bg-white/5 pr-1">
+                              
+                              <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-sm md:text-xl" : "text-yellow-400 text-xs md:text-xl"}`}>{i + 1}</span>
+                              <span className="text-white/90 font-bold text-xs md:text-sm">{team.pkt}</span>
+                              
+                              {/* Die Teamcard nimmt sich jetzt das komplette "1fr" (den gesamten restlichen Platz) */}
+                              <div className="flex items-center justify-start py-1 overflow-hidden w-full">
+                                <TeamCard team={team} isDu={myAllTeamIds.includes(team.id)} />
+                              </div>
+                              
+                              <span>{team.sp}</span>
+                              <span className="text-green-400 font-bold">{team.g}</span>
+                              <span>{team.u}</span>
+                              <span>{team.v}</span>
+                              <span className="font-bold text-yellow-400 text-[9px] sm:text-sm whitespace-nowrap">{team.tore}:{team.gegentore}</span>
+                            
                             </div>
                           );
                         })}

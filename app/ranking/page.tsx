@@ -40,7 +40,7 @@ export default function RankingPage() {
     setLoading(true);
     
     // 🔥 BLAZING FAST: Die Datenbank macht jetzt die ganze Arbeit!
-    // Wir fordern die Daten perfekt sortiert aus der Datenbank an und begrenzen auf die Top 50.
+    // Wir fordern die Daten perfekt sortiert aus der Datenbank an und begrenzen auf die Top 25.
     const { data } = await supabase
       .from("teams")
       .select("*")
@@ -80,7 +80,7 @@ export default function RankingPage() {
           Ranking Season 0
         </h1>
         <p className="text-gray-400 max-w-md text-sm md:text-base font-medium mt-2">
-          Die Elite des WombiCups im Überblick. Die Top 50 kämpfen um den Thron!
+          Die Elite des WombiCups im Überblick. Die Top 25 kämpfen um den Thron!
         </p>
       </div>
 

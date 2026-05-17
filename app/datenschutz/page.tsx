@@ -211,10 +211,10 @@ export default function DatenschutzPage() {
           </button>
         ) : (
           <div className="text-gray-300 leading-relaxed animate-in fade-in duration-500">
-            <p className="font-bold text-white text-lg mb-1">[X] [X]</p>
-            <p>[X] [X]</p>
-            <p>[X] [X]</p>
-            <p className="mt-2 text-blue-400 hover:underline"><a href="mailto:info@wombicup.de">@wombicup.de</a></p>
+            <p className="text-white text-lg mb-1">[Florian] [Unger]</p>
+            <p>[Marburger] [86]</p>
+            <p>[35398] [Giessen]</p>
+            <p className="mt-2 text-blue-400 hover:underline"><a href="mailto:noamacklemore@gmail.com">noamacklemore@gmail.com</a></p>
             <button 
               onClick={() => setShowContact(false)}
               className="mt-4 text-[10px] uppercase text-gray-500 hover:text-white transition-colors"
@@ -232,7 +232,7 @@ export default function DatenschutzPage() {
           Solltest du Fragen haben, kannst du uns jederzeit kontaktieren.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <a href="mailto:info@wombicup.de" className="bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-8 rounded-xl transition-all border border-white/10 text-sm text-center">
+          <a href="mailto:noamacklemore@gmail.com" className="bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-8 rounded-xl transition-all border border-white/10 text-sm text-center">
             E-Mail senden
           </a>
           <a href="https://discord.gg/Ajjx7eEdBX" target="_blank" className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-xl transition-all text-sm text-center">
