@@ -1314,7 +1314,7 @@ function MeineTeamsContent() {
                   <input 
                     type="text" 
                     readOnly 
-                    value={`${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${currentTeam.id}`} 
+                    value={`https://wombicup.de/invite/${currentTeam.id}`}
                     className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-gray-400 truncate outline-none cursor-copy"
                     onClick={handleCopyInviteLink}
                   />
