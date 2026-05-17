@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image"; // 🔥 NEU IMPORTIERT
+import Image from "next/image";
 
 // 🔥 XP-KURVE HELPER
 const getRequiredXpForLevel = (level: number) => {
@@ -124,10 +124,16 @@ export default function InvitePage() {
   const handleDiscordLogin = async () => {
     setJoining(true);
     try {
+      // 1. Holt den exakten Pfad (/invite/123)
+      const currentPath = window.location.pathname + window.location.search;
+
+      // 2. 🔥 Setzt das Cookie absolut sicher mit .wombicup.de (gilt für mit & ohne www)
+      document.cookie = `redirect_next=${currentPath}; path=/; max-age=300; SameSite=Lax; secure; domain=.wombicup.de`;
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "discord",
         options: {
-          redirectTo: `${window.location.origin}/invite/${params.id}`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) throw error;
