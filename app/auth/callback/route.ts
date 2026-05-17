@@ -1,25 +1,23 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClient } from "@/lib/supabase-server";
-import { cookies } from 'next/headers'; // 🔥 NEU: Importiert für das Auslesen des Cookies
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
   
-  // 🔥 NEU: Wir holen uns das Ziel aus dem Cookie. Wenn keins da ist, nehmen wir '/'
-  const cookieStore = await cookies();
-  const next = cookieStore.get('redirect_next')?.value || '/';
+  // 🔥 Holt das Ziel direkt aus dem URL-Parameter (?next=/invite/123)
+  const next = requestUrl.searchParams.get('next') || '/';
 
   if (code) {
     const supabase = await createClient();
     
-    // Tauscht den Code gegen die echte Session aus
+    // Tauscht den Code gegen die echte Session aus 
+    // (schreibt jetzt dank des Fixes in lib/supabase-server.ts das Cookie fehlerfrei!)
     const { data } = await supabase.auth.exchangeCodeForSession(code);
     
     // Discord-Rollen direkt beim Login prüfen und in DB schreiben
     if (data?.user) {
-      // Wir holen die Discord ID direkt aus den Nutzerdaten der Session-Antwort
       const discordIdentity = data.user.identities?.find(
         (id: any) => id.provider === 'discord'
       );
@@ -31,11 +29,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Erstelle die Weiterleitung an dein eigentliches Ziel
-  const response = NextResponse.redirect(new URL(next, request.url));
-  
-  // 🔥 NEU: Das temporäre Cookie direkt nach der Weiterleitung wieder löschen
-  response.cookies.delete('redirect_next');
-
-  return response;
+  // Leitet den User erfolgreich eingeloggt zurück auf die Invite-Seite
+  return NextResponse.redirect(new URL(next, request.url));
 }

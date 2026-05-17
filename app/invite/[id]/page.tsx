@@ -124,16 +124,14 @@ export default function InvitePage() {
   const handleDiscordLogin = async () => {
     setJoining(true);
     try {
-      // 1. Holt den exakten Pfad (/invite/123)
-      const currentPath = window.location.pathname + window.location.search;
-
-      // 2. 🔥 Setzt das Cookie absolut sicher mit .wombicup.de (gilt für mit & ohne www)
-      document.cookie = `redirect_next=${currentPath}; path=/; max-age=300; SameSite=Lax; secure; domain=.wombicup.de`;
+      // Erklingt automatisch nach deiner Live-Domain (wombicup.de oder www.wombicup.de)
+      const origin = window.location.origin; 
+      const redirectUrl = `${origin}/auth/callback?next=/invite/${params.id}`;
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "discord",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
         },
       });
       if (error) throw error;
