@@ -49,6 +49,7 @@ export default function Anmelden() {
     init();
   }, []);
 
+  // 🔥 HIER IST DER NEUE CACHE FÜR DISCORD EINGEBAUT
   useEffect(() => {
     const checkDiscord = async () => {
       const userId = localStorage.getItem("discord_user_id");
@@ -56,10 +57,31 @@ export default function Anmelden() {
         setIsCheckingDiscord(false);
         return;
       }
+
+      // Prüfen, ob wir einen frischen Cache haben (jünger als 5 Minuten / 300.000 ms)
+      const cachedDiscordData = sessionStorage.getItem("discord_cache");
+      const cachedTime = sessionStorage.getItem("discord_cache_time");
+      const now = new Date().getTime();
+
+      if (cachedDiscordData && cachedTime && (now - parseInt(cachedTime)) < 300000) {
+        setDiscordUser(JSON.parse(cachedDiscordData));
+        setIsCheckingDiscord(false);
+        return; // Direkt abbrechen, keine API-Anfrage nötig!
+      }
+
+      // Falls kein Cache da ist -> Fetch ausführen
       try {
         const res = await fetch(`/api/discord/member?userId=${userId}`);
         const data = await res.json();
-        setDiscordUser(data.error ? null : data);
+        
+        if (!data.error) {
+          setDiscordUser(data);
+          // Daten frisch in den Cache schreiben
+          sessionStorage.setItem("discord_cache", JSON.stringify(data));
+          sessionStorage.setItem("discord_cache_time", now.toString());
+        } else {
+          setDiscordUser(null);
+        }
       } catch (err) {
         setDiscordUser(null);
       } finally {
@@ -201,9 +223,6 @@ export default function Anmelden() {
     setLoading((prev) => ({ ...prev, [tournamentId]: false }));
   };
 
-  // 🔥 HIER WAR DER FEHLER: Das radikale Stopp-Schild wurde entfernt!
-  // Wir rendern die Seite immer sofort.
-
   return (
     <>
       <div className="px-4 sm:px-6 pt-10 md:pt-10 pb-16 w-full max-w-6xl mx-auto flex flex-col min-h-screen">
@@ -212,7 +231,6 @@ export default function Anmelden() {
           Turnier <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">Anmeldung</span>
         </h1>
 
-        {/* Wenn die Turniere noch laden, zeigen wir einen hübschen kleinen Ladekreis anstatt einer schwarzen Seite */}
         {tournamentsLoading ? (
           <div className="flex justify-center items-center py-20">
             <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
@@ -283,10 +301,9 @@ export default function Anmelden() {
                       {(availableTeams.length > 0 || ownedTeams.length === 0) && (
                         <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 pt-2 border-t border-white/10 mt-2">
                           
-                          {/* 🔥 NEU: Wir zeigen eine kleine Ladeanzeige nur HIER unten, falls API/DB noch brauchen */}
                           {(!dbCheckDone || isCheckingDiscord) ? (
                             <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">
-                              Lade Teams...
+                              Lade Berechtigung...
                             </div>
                           ) : !user || !discordUser || !hasRequiredRole ? (
                             <a 
