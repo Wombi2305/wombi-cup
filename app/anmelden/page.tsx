@@ -303,7 +303,7 @@ export default function Anmelden() {
                           
                           {(!dbCheckDone || isCheckingDiscord) ? (
                             <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">
-                              Lade Berechtigung...
+                              Lade Teams...
                             </div>
                           ) : !user || !discordUser || !hasRequiredRole ? (
                             <a 
