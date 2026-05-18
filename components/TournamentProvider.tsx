@@ -74,7 +74,8 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       matches, 
       groupAssignments, 
       loading, 
-      refreshData: fetchAllData 
+      refreshData: fetchAllData,
+      refreshTournaments: fetchAllData // 🔥 HIER IST DER FIX! Beide Namen sind jetzt verfügbar.
     }}>
       {children}
     </TournamentContext.Provider>
