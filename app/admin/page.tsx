@@ -19,6 +19,9 @@ export default function Admin() {
   const [newGroupCount, setNewGroupCount] = useState("");
   const [newGroupSize, setNewGroupSize] = useState("");
   
+  // --- GEÄNDERT: Standardwert ist jetzt t_cup ---
+  const [newCupType, setNewCupType] = useState("t_cup");
+  
   const [openDesignId, setOpenDesignId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedRounds, setExpandedRounds] = useState<any>({});
@@ -618,6 +621,7 @@ export default function Admin() {
     
     const { error } = await supabase.from("tournaments").insert([{
       name: newName,
+      cup_type: newCupType,
       start_time: newStartTime || null,
       max_teams: newMaxTeams ? Number(newMaxTeams) : null,
       group_count: newGroupCount ? Number(newGroupCount) : null,
@@ -637,6 +641,7 @@ export default function Admin() {
 
     setShowPopup(false);
     setNewName("");
+    setNewCupType("t_cup"); // --- GEÄNDERT: Setzt auf T-Cup zurück ---
     setNewStartTime("");
     setNewMaxTeams("");
     setNewGroupCount("");
@@ -954,13 +959,28 @@ export default function Admin() {
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
           <div className="bg-[#111] p-6 md:p-8 rounded-3xl border border-white/10 w-full max-w-sm shadow-2xl">
             <h2 className="text-xl font-bold mb-6 text-center text-white tracking-wide">Neues Turnier</h2>
+            
             <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full p-3.5 bg-white/5 border border-white/10 rounded-xl mb-4 outline-none focus:border-green-500 transition text-sm" placeholder="Turniername" />
+            
+            {/* --- GEÄNDERT: Dropdown OHNE Standard Cup, T-Cup ist Standard --- */}
+            <select
+              value={newCupType}
+              onChange={(e) => setNewCupType(e.target.value)}
+              className="w-full p-3.5 bg-white/5 border border-white/10 rounded-xl mb-4 outline-none focus:border-green-500 transition text-sm text-white appearance-none"
+            >
+              <option value="t_cup" className="bg-[#111]">T-Cup</option>
+              <option value="night_cup" className="bg-[#111]">Night Cup</option>
+              <option value="cup_21er" className="bg-[#111]">21er Cup</option>
+            </select>
+
             <input type="datetime-local" value={newStartTime} onChange={(e) => setNewStartTime(e.target.value)} className="w-full p-3.5 bg-white/5 border border-white/10 rounded-xl mb-4 outline-none focus:border-green-500 transition text-sm" />
             <input type="number" placeholder="Max. Teams" value={newMaxTeams} onChange={(e) => setNewMaxTeams(e.target.value)} className="w-full p-3.5 bg-white/5 border border-white/10 rounded-xl mb-4 outline-none focus:border-green-500 transition text-sm" />
+            
             <div className="flex gap-4 mb-8">
               <input type="number" placeholder="Gruppen" value={newGroupCount} onChange={(e) => setNewGroupCount(e.target.value)} className="w-full p-3.5 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-green-500 transition text-sm" />
               <input type="number" placeholder="Teams/Gr." value={newGroupSize} onChange={(e) => setNewGroupSize(e.target.value)} className="w-full p-3.5 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-green-500 transition text-sm" />
             </div>
+            
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={createTournament} className="w-full bg-green-600 py-3.5 rounded-xl font-bold transition hover:bg-green-500 text-sm shadow-lg">Erstellen</button>
               <button onClick={() => setShowPopup(false)} className="w-full bg-white/10 py-3.5 rounded-xl font-bold transition hover:bg-white/20 text-sm">Abbrechen</button>

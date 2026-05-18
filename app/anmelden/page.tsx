@@ -49,7 +49,7 @@ export default function Anmelden() {
     init();
   }, []);
 
-  // 🔥 HIER IST DER NEUE CACHE FÜR DISCORD EINGEBAUT
+  // Blitzschneller Discord-Check mit Caching
   useEffect(() => {
     const checkDiscord = async () => {
       const userId = localStorage.getItem("discord_user_id");
@@ -58,7 +58,6 @@ export default function Anmelden() {
         return;
       }
 
-      // Prüfen, ob wir einen frischen Cache haben (jünger als 5 Minuten / 300.000 ms)
       const cachedDiscordData = sessionStorage.getItem("discord_cache");
       const cachedTime = sessionStorage.getItem("discord_cache_time");
       const now = new Date().getTime();
@@ -66,17 +65,15 @@ export default function Anmelden() {
       if (cachedDiscordData && cachedTime && (now - parseInt(cachedTime)) < 300000) {
         setDiscordUser(JSON.parse(cachedDiscordData));
         setIsCheckingDiscord(false);
-        return; // Direkt abbrechen, keine API-Anfrage nötig!
+        return; 
       }
 
-      // Falls kein Cache da ist -> Fetch ausführen
       try {
         const res = await fetch(`/api/discord/member?userId=${userId}`);
         const data = await res.json();
         
         if (!data.error) {
           setDiscordUser(data);
-          // Daten frisch in den Cache schreiben
           sessionStorage.setItem("discord_cache", JSON.stringify(data));
           sessionStorage.setItem("discord_cache_time", now.toString());
         } else {
@@ -91,6 +88,7 @@ export default function Anmelden() {
     checkDiscord();
   }, []);
 
+  // Standardwerte setzen
   useEffect(() => {
     if (tournaments.length === 0 || !dbCheckDone || isCheckingDiscord) return;
 
@@ -233,7 +231,7 @@ export default function Anmelden() {
 
         {tournamentsLoading ? (
           <div className="flex justify-center items-center py-20">
-            <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(234,179,8,0.5)]"></div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 pb-10">
@@ -252,127 +250,191 @@ export default function Anmelden() {
               const availableTeams = ownedTeams.filter(ot => !registeredTeamIds.includes(ot.id));
 
               return (
-                <div key={t.id} className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl p-6 shadow-xl flex flex-col gap-3 transition-all h-fit">
-                  <div>
-                    <h3 className="text-xl md:text-2xl font-bold text-white drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]">{t.name}</h3>
-                    <p className="text-sm text-gray-400 mt-1">{t.start_time ? new Date(t.start_time).toLocaleString() : "Kein Datum"}</p>
-                    <p className="text-sm md:text-base mt-4 text-white font-semibold">{approvedCount} / {t.max_teams || "∞"} Teams</p>
-                    <div className="w-full h-2 bg-white/10 rounded-full mt-2">
-                      <div className={`h-2 rounded-full transition-all duration-500 ${isFull ? "bg-red-500" : "bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.3)]"}`} style={{ width: `${percent}%` }} />
+                <div 
+                  key={t.id} 
+                  className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-4 transition-all duration-300 hover:-translate-y-2 hover:bg-white/10 hover:border-white/20 hover:shadow-[0_15px_40px_rgba(0,0,0,0.6)] h-fit overflow-hidden"
+                >
+                  {/* Sanfter Hintergrund-Glow Effekt in der Karte */}
+                  <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+
+                  {/* Header-Bereich mit Titel und Status-Badge */}
+                  <div className="flex justify-between items-start gap-4 relative z-10">
+                    
+                    {/* --- NEU: Cup-Art Anzeige über dem Titel --- */}
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase font-black tracking-widest text-yellow-500/80 mb-1">
+                        {t.cup_type === 'night_cup' ? '🌙 Night Cup' : t.cup_type === 'cup_21er' ? '🔥 21er Cup' : '🏆 T-Cup'}
+                      </span>
+                      <h3 className="text-xl md:text-2xl font-black text-white drop-shadow-md leading-tight">
+                        {t.name}
+                      </h3>
                     </div>
-                    <div className="text-xs md:text-sm mt-2 font-semibold italic uppercase tracking-wider">
-                      {isFull && !isReady ? <span className="text-red-400">Warteliste ({waiting})</span> : !isReady ? <span className="text-green-400">{t.max_teams ? `Noch ${freeSpots} Plätze frei` : "Unbegrenzt frei"}</span> : null}
+                    
+                    {/* Status Badge oben rechts */}
+                    <div className="shrink-0 mt-1">
+                      {isReady ? (
+                        <span className="px-3 py-1 bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-black tracking-widest rounded-full shadow-[0_0_10px_rgba(34,197,94,0.3)] animate-pulse">
+                          Live
+                        </span>
+                      ) : isFull ? (
+                        <span className="px-3 py-1 bg-red-500/20 border border-red-500/50 text-red-400 text-[10px] uppercase font-black tracking-widest rounded-full">
+                          Voll
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-blue-500/20 border border-blue-500/50 text-blue-400 text-[10px] uppercase font-black tracking-widest rounded-full">
+                          Offen
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {isReady ? (
-                    <div className="flex flex-col gap-3 mt-auto">
-                      <div className="text-green-400 text-xs font-bold animate-pulse text-center uppercase tracking-widest bg-green-500/10 py-2 rounded-lg border border-green-500/20">🔴 Live – Gruppen verfügbar</div>
-                      <a href={`/tabelle?tournament=${t.id}`} className="w-full block p-3 md:p-4 rounded-2xl bg-blue-600 text-white text-center font-bold hover:bg-blue-500 transition shadow-lg">Zu den Gruppen →</a>
+                  {/* Meta-Daten mit kleinen SVG-Icons */}
+                  <div className="flex flex-col gap-2 text-sm text-gray-300 font-medium relative z-10">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>{t.start_time ? new Date(t.start_time).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : "Kein Datum"}</span>
                     </div>
-                  ) : (
-                    <div className="flex flex-col gap-3 mt-auto">
-                      
-                      {myRegistrations.length > 0 && (
-                        <div className="flex flex-col gap-2 mb-2">
-                          {myRegistrations.map((reg: any) => {
-                            const isApproved = reg.status === "approved";
-                            return (
-                              <div key={reg.id} className="flex flex-col gap-2">
-                                <div className={`p-2 rounded-2xl border text-center ${isApproved ? "bg-green-500/10 border-green-500/20" : "bg-yellow-500/10 border-yellow-500/20"}`}>
-                                  <p className={`font-bold uppercase tracking-widest text-[10px] mb-0.5 ${isApproved ? "text-green-400" : "text-yellow-500"}`}>
-                                    {isApproved ? "✓ Angemeldet" : "⏳ Auf Warteliste"}
-                                  </p>
-                                  <p className="text-white text-sm font-semibold truncate">{reg.teams?.teamname}</p>
-                                </div>
-                                <button 
-                                  onClick={() => handleDelete(reg.id, t.id)} 
-                                  disabled={deleteLoading[t.id]} 
-                                  className="w-full p-2 rounded-xl bg-red-500/10 text-red-400 text-[10px] font-bold hover:bg-red-500/20 transition disabled:opacity-50 uppercase tracking-widest"
-                                >
-                                  {deleteLoading[t.id] ? "Wird abgemeldet..." : "Team abmelden"}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                    
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      <span className="text-white font-bold">{approvedCount} <span className="text-gray-400 font-normal">/ {t.max_teams || "∞"} Teams angemeldet</span></span>
+                    </div>
+                  </div>
 
-                      {(availableTeams.length > 0 || ownedTeams.length === 0) && (
-                        <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 pt-2 border-t border-white/10 mt-2">
-                          
-                          {(!dbCheckDone || isCheckingDiscord) ? (
-                            <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">
-                              Lade Teams...
-                            </div>
-                          ) : !user || !discordUser || !hasRequiredRole ? (
-                            <a 
-                              href="https://discord.gg/Ajjx7eEdBX" 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
-                            >
-                              Discord Beitreten
-                            </a>
-                          ) : (
-                            <>
-                              {ownedTeams.length > 0 ? (
-                                <div className="flex flex-col gap-2">
-                                  <span className="text-[10px] uppercase font-bold text-gray-500 tracking-widest ml-1">Team wählen:</span>
-                                  <div className="flex flex-col gap-2">
-                                    {availableTeams.map((at) => {
-                                      const isSelected = (selectedTeam[t.id] || availableTeams[0]?.id) === at.id;
-                                      return (
-                                        <button
-                                          key={at.id}
-                                          type="button"
-                                          onClick={() => setSelectedTeam(prev => ({ ...prev, [t.id]: at.id }))}
-                                          className={`w-full p-3 rounded-xl text-sm font-bold text-left transition-all border ${
-                                            isSelected 
-                                            ? "bg-yellow-500/10 border-yellow-500/50 text-yellow-400 shadow-sm" 
-                                            : "bg-black/40 border-white/10 text-white hover:bg-white/5"
-                                          }`}
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <div className={`w-3 h-3 rounded-full border ${isSelected ? "border-yellow-400 bg-yellow-400" : "border-gray-500"} flex items-center justify-center shrink-0`}>
-                                              {isSelected && <div className="w-1.5 h-1.5 bg-black rounded-full"></div>}
-                                            </div>
-                                            <span className="truncate">{at.teamname}</span>
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
+                  {/* Progress Bar mit Glow */}
+                  <div className="relative z-10 mt-1">
+                    <div className="w-full h-2.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-700 ease-out relative ${isFull ? "bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]" : "bg-gradient-to-r from-yellow-600 to-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.5)]"}`} 
+                        style={{ width: `${percent}%` }} 
+                      >
+                        <div className="absolute top-0 right-0 bottom-0 w-10 bg-gradient-to-r from-transparent to-white/30 rounded-full"></div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-[11px] mt-2 font-bold text-right uppercase tracking-wider text-gray-400">
+                      {isFull && !isReady ? (
+                        <span className="text-red-400 flex items-center justify-end gap-1"><span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-ping"></span> {waiting} auf Warteliste</span>
+                      ) : !isReady ? (
+                        <span className="text-green-400">Noch {freeSpots} Plätze frei</span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Button-Area */}
+                  <div className="mt-auto pt-2 relative z-10">
+                    {isReady ? (
+                      <div className="flex flex-col gap-3">
+                        <a href={`/tabelle?tournament=${t.id}`} className="w-full block p-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 text-white text-center font-bold hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] hover:-translate-y-0.5 transition-all">Zu den Gruppen →</a>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        
+                        {/* Bereits angemeldete Teams */}
+                        {myRegistrations.length > 0 && (
+                          <div className="flex flex-col gap-2 mb-2">
+                            {myRegistrations.map((reg: any) => {
+                              const isApproved = reg.status === "approved";
+                              return (
+                                <div key={reg.id} className="flex flex-col gap-1.5">
+                                  <div className={`p-2.5 rounded-2xl border text-center ${isApproved ? "bg-green-500/10 border-green-500/30" : "bg-yellow-500/10 border-yellow-500/30"}`}>
+                                    <p className={`font-black uppercase tracking-widest text-[10px] mb-0.5 ${isApproved ? "text-green-400" : "text-yellow-500"}`}>
+                                      {isApproved ? "✓ Angemeldet" : "⏳ Auf Warteliste"}
+                                    </p>
+                                    <p className="text-white text-sm font-semibold truncate">{reg.teams?.teamname}</p>
                                   </div>
+                                  <button 
+                                    onClick={() => handleDelete(reg.id, t.id)} 
+                                    disabled={deleteLoading[t.id]} 
+                                    className="w-full p-2 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-bold hover:bg-red-500 hover:text-white transition-all duration-300 disabled:opacity-50 uppercase tracking-widest"
+                                  >
+                                    {deleteLoading[t.id] ? "Wird abgemeldet..." : "Team abmelden"}
+                                  </button>
                                 </div>
-                              ) : (
-                                <>
-                                  <input 
-                                    type="text" 
-                                    placeholder="Teamname" 
-                                    value={teamname[t.id] ?? ""} 
-                                    onChange={(e) => setTeamname((prev) => ({ ...prev, [t.id]: e.target.value }))} 
-                                    className="w-full p-3 rounded-2xl bg-black/40 border border-white/10 text-white outline-none transition-all focus:border-yellow-500/50 text-sm" 
-                                  />
-                                  <input 
-                                    type="text" 
-                                    placeholder="Captain" 
-                                    value={captain[t.id] ?? ""} 
-                                    onChange={(e) => setCaptain((prev) => ({ ...prev, [t.id]: e.target.value }))} 
-                                    className="w-full p-3 rounded-2xl bg-black/40 border border-white/10 text-white outline-none transition-all focus:border-yellow-500/50 text-sm" 
-                                  />
-                                </>
-                              )}
+                              );
+                            })}
+                          </div>
+                        )}
 
-                              <button disabled={loading[t.id]} className="w-full p-3 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-gradient-to-r from-yellow-600 to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/20 active:scale-95 mt-2">
-                                {loading[t.id] ? "Lädt..." : isFull ? "Auf Warteliste setzen" : "Team Anmelden"}
-                              </button>
-                            </>
-                          )}
+                        {/* Formular-Bereich */}
+                        {(availableTeams.length > 0 || ownedTeams.length === 0) && (
+                          <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 pt-4 border-t border-white/10">
+                            {(!dbCheckDone || isCheckingDiscord) ? (
+                              <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">
+                                Lade Berechtigung...
+                              </div>
+                            ) : !user || !discordUser || !hasRequiredRole ? (
+                              <a 
+                                href="https://discord.gg/Ajjx7eEdBX" 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
+                              >
+                                Discord Beitreten
+                              </a>
+                            ) : (
+                              <>
+                                {ownedTeams.length > 0 ? (
+                                  <div className="flex flex-col gap-2">
+                                    <span className="text-[10px] uppercase font-bold text-gray-500 tracking-widest ml-1">Team wählen:</span>
+                                    <div className="flex flex-col gap-2">
+                                      {availableTeams.map((at) => {
+                                        const isSelected = (selectedTeam[t.id] || availableTeams[0]?.id) === at.id;
+                                        return (
+                                          <button
+                                            key={at.id}
+                                            type="button"
+                                            onClick={() => setSelectedTeam(prev => ({ ...prev, [t.id]: at.id }))}
+                                            className={`w-full p-3 rounded-xl text-sm font-bold text-left transition-all border ${
+                                              isSelected 
+                                              ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.15)]" 
+                                              : "bg-black/40 border-white/10 text-white hover:bg-white/10"
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-3">
+                                              <div className={`w-4 h-4 rounded-full border-2 transition-colors ${isSelected ? "border-yellow-400 bg-yellow-400" : "border-gray-500"} flex items-center justify-center shrink-0`}>
+                                                {isSelected && <div className="w-2 h-2 bg-black rounded-full"></div>}
+                                              </div>
+                                              <span className="truncate">{at.teamname}</span>
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <input 
+                                      type="text" 
+                                      placeholder="Teamname" 
+                                      value={teamname[t.id] ?? ""} 
+                                      onChange={(e) => setTeamname((prev) => ({ ...prev, [t.id]: e.target.value }))} 
+                                      className="w-full p-3.5 rounded-xl bg-black/40 border border-white/10 text-white outline-none transition-all focus:border-yellow-500/50 focus:bg-white/5 text-sm" 
+                                    />
+                                    <input 
+                                      type="text" 
+                                      placeholder="Captain" 
+                                      value={captain[t.id] ?? ""} 
+                                      onChange={(e) => setCaptain((prev) => ({ ...prev, [t.id]: e.target.value }))} 
+                                      className="w-full p-3.5 rounded-xl bg-black/40 border border-white/10 text-white outline-none transition-all focus:border-yellow-500/50 focus:bg-white/5 text-sm" 
+                                    />
+                                  </>
+                                )}
 
-                        </form>
-                      )}
-                    </div>
-                  )}
+                                <button disabled={loading[t.id]} className="w-full p-3.5 rounded-xl font-black uppercase tracking-widest text-xs transition-all bg-gradient-to-r from-yellow-500 to-yellow-600 text-black hover:shadow-[0_0_20px_rgba(234,179,8,0.4)] hover:-translate-y-0.5 active:translate-y-0 mt-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                                  {loading[t.id] ? "Lädt..." : isFull ? "Auf Warteliste setzen" : "Team Anmelden"}
+                                </button>
+                              </>
+                            )}
+                          </form>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
