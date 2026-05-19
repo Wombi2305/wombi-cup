@@ -13,7 +13,7 @@ export default function ImpressumPage() {
         <h1 className="text-3xl md:text-4xl font-black tracking-tight uppercase mb-1">
           Impressum
         </h1>
-        <p className="text-gray-400 text-sm md:text-base">Rechtliche Informationen zum WombiCup</p>
+        <p className="text-gray-400 text-sm md:text-base">Rechtliche Daten zum WombiCup</p>
       </div>
 
       {/* 1. KONTAKT */}
@@ -154,17 +154,6 @@ export default function ImpressumPage() {
           WombiCup ist ein <strong className="text-white">inoffizielles, von Fans betriebenes Projekt</strong> und steht in <strong className="text-white">keiner Verbindung</strong> zu Electronic Arts Inc. oder dessen Tochtergesellschaften.<br /><br />
           EA SPORTS, EA SPORTS FC, das EA SPORTS FC-Logo und Pro Clubs sind Marken von Electronic Arts Inc. Alle anderen Marken sind Eigentum ihrer jeweiligen Inhaber.
         </p>
-      </section>
-
-      {/* 7. DATENSCHUTZ LINK */}
-      <section className="bg-[#111111]/80 backdrop-blur-md border border-white/10 rounded-2xl p-6 sm:p-8">
-        <h2 className="text-lg font-bold uppercase tracking-wider text-gray-200 mb-3">Datenschutz</h2>
-        <p className="text-gray-400 text-sm mb-6">
-          Informationen zum Umgang mit deinen Daten findest du in unserer Datenschutzerklärung.
-        </p>
-        <Link href="/datenschutz" className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-6 rounded-lg transition-colors text-sm">
-          Zur Datenschutzerklärung
-        </Link>
       </section>
 
       {/* STAND */}
