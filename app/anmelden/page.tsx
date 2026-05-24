@@ -375,12 +375,32 @@ export default function Anmelden() {
                                 Lade Berechtigung...
                               </div>
                             ) : !user ? (
-                              <a 
-                                href="/api/auth/discord"
-                                className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
-                              >
-                                Mit Discord Login
-                              </a>
+                           <button
+                              type="button"
+                              onClick={async () => {
+                               try {
+                                 const origin = window.location.origin;
+
+                                 const currentPath =
+                                  window.location.pathname + window.location.search;
+
+                                 const redirectUrl =
+                                  `${origin}/auth/callback?next=${encodeURIComponent(currentPath)}`;
+
+                                await supabase.auth.signInWithOAuth({
+                                 provider: "discord",
+                                 options: {
+                                  redirectTo: redirectUrl,
+                                  },
+                               });
+                              } catch (error) {
+                                console.error("Discord Login Fehler:", error);
+                              }
+                            }}
+                            className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
+                          >
+                            Mit Discord Login
+                          </button>
                             ) : !hasRequiredRole ? (
                               <>
                                 <button
