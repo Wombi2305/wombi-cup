@@ -168,7 +168,7 @@ function MeineTeamsContent() {
   const [members, setMembers] = useState<any[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [inviteUrlState, setInviteUrlState] = useState(""); // 🔥 State für die fertige kryptische URL im Modal
+  const [inviteUrlState, setInviteUrlState] = useState(""); 
 
   useEffect(() => {
     const fetchData = async () => {
@@ -260,13 +260,11 @@ function MeineTeamsContent() {
     setTimeout(() => setMessage(null), 3000);
   }, []);
 
-  // 🔥 GEÄNDERT: Generiert und liest den verschlüsselten Token-Link aus
   const handleOpenInviteModal = async () => {
     if (!currentTeam) return;
     
     let token = currentTeam.invite_token;
 
-    // Falls das Team in der Datenbank noch kein Token hat, generieren wir jetzt live eins
     if (!token) {
       const newToken = generateSecureToken(16);
       const { error } = await supabase
@@ -276,7 +274,6 @@ function MeineTeamsContent() {
 
       if (!error) {
         token = newToken;
-        // State aktualisieren, damit wir es nicht neu laden müssen
         setAllTeams(prev => prev.map(t => t.id === currentTeam.id ? { ...t, invite_token: newToken } : t));
       } else {
         showMessage("❌ Fehler beim Generieren des Einladungscodes.");
@@ -284,7 +281,6 @@ function MeineTeamsContent() {
       }
     }
 
-    // Setze den kryptischen Link in den State für das Modal
     setInviteUrlState(`${window.location.origin}/invite/${token}`);
     setShowAddMemberModal(true);
   };
@@ -560,7 +556,6 @@ function MeineTeamsContent() {
     setSaving(true);
     try {
       const isFirstTeam = allTeams.length === 0;
-      // 🔥 NEU: Direkt beim Erstellen des Teams erzeugen wir auch ein sicheres Token mit
       const initialToken = generateSecureToken(16);
       
       const { data: newTeam, error } = await supabase
@@ -685,6 +680,12 @@ function MeineTeamsContent() {
   if (loading) return <div className="min-h-screen flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
   if (!user) return <div className="min-h-screen flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
 
+  // 🔥 HIER ANGEPASST: Prüft direkt den Text in deiner 'role' Spalte
+const hasTeamVMRole = profile?.role === 'teamvm';
+
+  const ownedTeams = allTeams.filter(t => t.myRole === 'captain');
+  const joinedTeams = allTeams.filter(t => t.myRole !== 'captain');
+
   return (
     <>
       <div className="px-4 sm:px-6 pt-6 pb-16 w-full max-w-6xl mx-auto text-white flex flex-col relative overflow-hidden">
@@ -765,32 +766,70 @@ function MeineTeamsContent() {
           <div className="lg:col-span-2 flex flex-col gap-4">
             <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex flex-col h-fit transform-gpu">
               
-              <div className="mb-6 flex flex-wrap justify-center gap-2 bg-black/40 p-1.5 rounded-2xl w-fit border border-white/5 mx-auto">
-                {allTeams.map((team) => (
-                  <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-sm" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
-                    {team.logo_url ? (
-                      <Image 
-                        src={team.logo_url} 
-                        alt="Logo" 
-                        width={20}
-                        height={20}
-                        className="w-5 h-5 rounded-full object-cover border border-white/20" 
-                      />
-                    ) : (
-                      <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
-                    )}
-                    {team.teamname}
-                    {team.myRole !== 'captain' && (
-                      <span className="ml-1 text-[9px] uppercase bg-white/10 px-1.5 py-0.5 rounded text-gray-300">
-                        {team.myRole === 'co-captain' ? 'Co-Capt' : 'Spieler'}
+              {/* TEAM AUSWAHL CONTAINER */}
+              <div className="mb-6 flex justify-center w-full">
+                <div className="bg-black/30 backdrop-blur-md p-2 rounded-3xl border border-white/5 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 sm:gap-4 shadow-inner max-w-full">
+                  
+                  {/* Block 1: Eigene Teams */}
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {ownedTeams.length > 0 && (
+                      <span className="text-[9px] uppercase tracking-widest text-yellow-500/70 font-black bg-yellow-500/10 border border-yellow-500/20 px-2 py-1 rounded-lg hidden sm:block">
+                        Eigene
                       </span>
                     )}
-                    {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
-                  </button>
-                ))}
-                <button onClick={() => handleSelectTeam(null, true)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${isCreating ? "bg-yellow-500/10 text-yellow-500" : "text-gray-500 hover:text-white hover:bg-white/5"}`}>
-                  <span className="text-base leading-none">+ Neu</span>
-                </button>
+                    
+                    {ownedTeams.map((team) => (
+                      <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.1)] border border-white/10" : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"}`}>
+                        {team.logo_url ? (
+                          <Image src={team.logo_url} alt="Logo" width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white/20" />
+                        ) : (
+                          <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
+                        )}
+                        {team.teamname}
+                        {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
+                      </button>
+                    ))}
+                    
+                    {/* 🔥 NEU: Der "+ Neu" Button wird nur angezeigt, wenn der User die Rolle hat */}
+                    {hasTeamVMRole && (
+                      <button onClick={() => handleSelectTeam(null, true)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${isCreating ? "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20" : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/5"}`}>
+                        <span className="text-base leading-none">+</span> Neu
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Separator */}
+                  {ownedTeams.length > 0 && joinedTeams.length > 0 && (
+                    <>
+                      <div className="hidden sm:block w-px h-8 bg-white/10 rounded-full"></div>
+                      <div className="sm:hidden w-1/2 h-px bg-white/10 rounded-full my-1"></div>
+                    </>
+                  )}
+
+                  {/* Block 2: Beigetretene Teams */}
+                  {joinedTeams.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <span className="text-[9px] uppercase tracking-widest text-gray-400 font-black bg-white/5 border border-white/10 px-2 py-1 rounded-lg hidden sm:block">
+                        Beigetreten
+                      </span>
+                      
+                      {joinedTeams.map((team) => (
+                        <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.1)] border border-white/10" : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"}`}>
+                          {team.logo_url ? (
+                            <Image src={team.logo_url} alt="Logo" width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white/20" />
+                          ) : (
+                            <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
+                          )}
+                          {team.teamname}
+                          <span className={`ml-1 text-[9px] uppercase px-1.5 py-0.5 rounded font-black ${team.myRole === 'co-captain' ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-gray-400'}`}>
+                            {team.myRole === 'co-captain' ? 'Co-Capt' : 'Spieler'}
+                          </span>
+                          {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {!isCreating && currentTeam && (
@@ -1008,7 +1047,6 @@ function MeineTeamsContent() {
                       <p className="text-xs text-gray-400 mt-1">Verwalte hier deine Spieler und Co-Captains.</p>
                     </div>
                     {(currentTeam.myRole === 'captain' || currentTeam.myRole === 'co-captain') && (
-                      /* 🔥 GEÄNDERT: Ruft nun die neue Token-Modal Funktion auf */
                       <button onClick={handleOpenInviteModal} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
                         + Einladen
                       </button>
@@ -1296,22 +1334,33 @@ function MeineTeamsContent() {
 
               {/* === INHALT: NEUES TEAM ERSTELLEN === */}
               {isCreating && (
-                <form onSubmit={handleSaveTeam} className="flex flex-col gap-6 mt-6 flex-1 animate-in fade-in zoom-in-95">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Teamname</label>
-                      <input type="text" value={teamname} onChange={(e) => setTeamname(e.target.value)} placeholder="Dein Teamname" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
+                hasTeamVMRole ? (
+                  <form onSubmit={handleSaveTeam} className="flex flex-col gap-6 mt-6 flex-1 animate-in fade-in zoom-in-95">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Teamname</label>
+                        <input type="text" value={teamname} onChange={(e) => setTeamname(e.target.value)} placeholder="Dein Teamname" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Captain (EA ID)</label>
+                        <input type="text" value={captain} onChange={(e) => setCaptain(e.target.value)} placeholder="EA ID eingeben" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Captain (EA ID)</label>
-                      <input type="text" value={captain} onChange={(e) => setCaptain(e.target.value)} placeholder="EA ID eingeben" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
-                    </div>
+                    
+                    <button type="submit" disabled={saving || uploadingLogo} className="w-full bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 text-black font-black uppercase tracking-widest py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(250,204,21,0.3)] hover:shadow-[0_0_30px_rgba(250,204,21,0.5)] hover:-translate-y-0.5 disabled:opacity-50 mt-auto">
+                      {saving ? "Wird gespeichert..." : "Team erstellen"}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-8 mt-6 bg-red-500/5 border border-red-500/10 rounded-3xl text-center animate-in fade-in zoom-in-95 h-full">
+                    <span className="text-4xl mb-4 drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]">🔒</span>
+                    <h3 className="text-xl font-black text-white mb-2">Fehlende Berechtigung</h3>
+                    <p className="text-gray-400 text-sm max-w-md leading-relaxed">
+                      Du benötigst die Rolle <strong className="text-red-400">TeamVM</strong>, um ein eigenes Team zu erstellen. 
+                      Bitte wende dich an den Support, falls du diese Rolle haben solltest.
+                    </p>
                   </div>
-                  
-                  <button type="submit" disabled={saving || uploadingLogo} className="w-full bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 text-black font-black uppercase tracking-widest py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(250,204,21,0.3)] hover:shadow-[0_0_30px_rgba(250,204,21,0.5)] hover:-translate-y-0.5 disabled:opacity-50 mt-auto">
-                    {saving ? "Wird gespeichert..." : "Team erstellen"}
-                  </button>
-                </form>
+                )
               )}
 
             </div>
@@ -1342,7 +1391,6 @@ function MeineTeamsContent() {
                   <input 
                     type="text" 
                     readOnly 
-                    /* 🔥 GEÄNDERT: Nutzt nun die verschlüsselte URL aus dem State */
                     value={inviteUrlState}
                     className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-gray-400 truncate outline-none cursor-copy"
                     onClick={handleCopyInviteLink}
