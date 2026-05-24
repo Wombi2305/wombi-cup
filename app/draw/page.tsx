@@ -141,9 +141,11 @@ export default function DrawPage() {
         const res = await fetch(`/api/discord/member?userId=${discordId}`);
         const data = await res.json();
 
+        // --- GEÄNDERT: Turnierleitung Rolle hinzugefügt ---
         const ALLOWED_ROLES = [
           "1493976124173062195", // 🎥 Streamer
           "1492478735444873398", // 👑 Orga
+          "1504431450177667092", // 📋 Turnierleitung
         ];
 
         const roles = data.roles || [];

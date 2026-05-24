@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function Admin() {
   const [loggedIn, setLoggedIn] = useState(false);
+  const [isFullAdmin, setIsFullAdmin] = useState(false); // --- NEU: Prüft ob Orga oder "nur" Turnierleitung ---
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
@@ -19,7 +20,6 @@ export default function Admin() {
   const [newGroupCount, setNewGroupCount] = useState("");
   const [newGroupSize, setNewGroupSize] = useState("");
   
-  // --- GEÄNDERT: Standardwert ist jetzt t_cup ---
   const [newCupType, setNewCupType] = useState("t_cup");
   
   const [openDesignId, setOpenDesignId] = useState<number | null>(null);
@@ -44,12 +44,17 @@ export default function Admin() {
       try {
         const res = await fetch(`/api/discord/member?userId=${userId}`);
         const data = await res.json();
+        
+        // --- GEÄNDERT: Rollen-Check für Orga & Turnierleitung ---
         const ORGA_ROLE_ID = "1492478735444873398"; 
+        const TL_ROLE_ID = "1504431450177667092"; // Turnierleitung
 
-        const hasRole = data.roles?.some((r: string) => r === ORGA_ROLE_ID);
+        const hasOrgaRole = data.roles?.some((r: string) => r === ORGA_ROLE_ID);
+        const hasTlRole = data.roles?.some((r: string) => r === TL_ROLE_ID);
 
-        if (hasRole) {
+        if (hasOrgaRole || hasTlRole) {
           setLoggedIn(true);
+          setIsFullAdmin(hasOrgaRole); // Nur wenn er die Orga-Rolle hat, ist er Full-Admin
           fetchData();
         } else {
           setLoggedIn(false);
@@ -245,6 +250,7 @@ export default function Admin() {
   };
 
   const handleSaveDesignModal = async (id: number, updatedData: any) => {
+    if (!isFullAdmin) return; // Sicherheits-Check
     const { error } = await supabase
       .from("tournaments")
       .update({
@@ -274,6 +280,7 @@ export default function Admin() {
   };
 
   const resetTournament = async (tournamentId: number) => {
+    if (!isFullAdmin) return; // Sicherheits-Check
     if (!confirm("Turnier wirklich zurücksetzen? ❗ Alle Spiele und Gruppenzuweisungen werden gelöscht!")) return;
 
     const { error: matchError } = await supabase.from("matches").delete().eq("tournament_id", tournamentId);
@@ -641,7 +648,7 @@ export default function Admin() {
 
     setShowPopup(false);
     setNewName("");
-    setNewCupType("t_cup"); // --- GEÄNDERT: Setzt auf T-Cup zurück ---
+    setNewCupType("t_cup");
     setNewStartTime("");
     setNewMaxTeams("");
     setNewGroupCount("");
@@ -680,6 +687,7 @@ export default function Admin() {
   return (
     <main className="min-h-screen pt-24 pb-12 text-white px-4 md:px-6 max-w-[1600px] mx-auto w-full">
       
+      {/* Turniere anlegen darf jeder mit Zugriff aufs Panel */}
       <button onClick={() => setShowPopup(true)} className="w-full md:w-auto bg-green-600 px-6 py-3 md:py-2 rounded-xl font-bold mb-8 md:mb-10 hover:bg-green-500 transition shadow-lg shadow-green-900/20">
         + Neues Turnier
       </button>
@@ -707,12 +715,22 @@ export default function Admin() {
                   <h3 className="text-xl md:text-2xl font-bold break-words">{t.name}</h3>
                   <div className="flex flex-wrap gap-2 mt-3">
                     <button onClick={() => setEditingId(t.id)} className="text-[10px] md:text-xs px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 uppercase font-bold hover:bg-blue-500/20 transition">✏️ Edit</button>
-                    <button onClick={() => setOpenDesignId(t.id)} className="text-[10px] md:text-xs px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20 uppercase font-bold hover:bg-purple-500/20 transition">🎨 Design</button>
+                    
+                    {/* --- GEÄNDERT: Design-Knopf nur für Orga (isFullAdmin) --- */}
+                    {isFullAdmin && (
+                      <button onClick={() => setOpenDesignId(t.id)} className="text-[10px] md:text-xs px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20 uppercase font-bold hover:bg-purple-500/20 transition">🎨 Design</button>
+                    )}
+                    
                     <button onClick={() => duplicateTournament(t)} className="text-[10px] md:text-xs px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 uppercase font-bold hover:bg-white/10 transition">📄 Copy</button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 w-full xl:w-auto justify-start xl:justify-end">
-                  <button onClick={() => resetTournament(t.id)} className="flex-1 xl:flex-none bg-red-600/10 text-red-500 px-3 py-2 rounded-lg text-xs font-bold border border-red-500/20 hover:bg-red-600 hover:text-white transition text-center">🔄 Neustart</button>
+                  
+                  {/* --- GEÄNDERT: Neustart-Knopf nur für Orga (isFullAdmin) --- */}
+                  {isFullAdmin && (
+                    <button onClick={() => resetTournament(t.id)} className="flex-1 xl:flex-none bg-red-600/10 text-red-500 px-3 py-2 rounded-lg text-xs font-bold border border-red-500/20 hover:bg-red-600 hover:text-white transition text-center">🔄 Neustart</button>
+                  )}
+                  
                   <button onClick={() => finishTournament(t.id)} className="flex-1 xl:flex-none bg-red-500/10 text-red-500 px-3 py-2 rounded-lg text-xs font-bold border border-red-500/20 hover:bg-red-600 hover:text-white transition text-center">🛑 Beenden</button>
                 </div>
               </div>
@@ -721,7 +739,11 @@ export default function Admin() {
               <div className="flex gap-2 border-b border-white/10 mb-6 overflow-x-auto no-scrollbar">
                 <button onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "teams" })} className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'teams' ? 'text-white border-b-2 border-white' : 'text-gray-500 hover:text-gray-300'}`}>👥 Teams</button>
                 <button onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "gruppen" })} className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'gruppen' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-500 hover:text-gray-300'}`}>⚽ Gruppen</button>
-                <button onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "ko" })} className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'ko' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}>🏆 K.O.-Phase</button>
+                
+                {/* K.O.-Phase Button nur anzeigen, wenn es KEIN T-Cup ist */}
+                {t.cup_type !== 't_cup' && (
+                  <button onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "ko" })} className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'ko' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}>🏆 K.O.-Phase</button>
+                )}
               </div>
 
               {/* --- TAB 1: TEAMS --- */}
@@ -846,7 +868,7 @@ export default function Admin() {
               )}
 
               {/* --- TAB 3: K.O. PHASE --- */}
-              {currentTab === "ko" && (
+              {currentTab === "ko" && t.cup_type !== 't_cup' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2">
                   {!t.started ? (
                      <p className="text-gray-500 text-sm text-center italic py-4">Turnier muss zuerst gestartet werden.</p>
@@ -962,7 +984,6 @@ export default function Admin() {
             
             <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full p-3.5 bg-white/5 border border-white/10 rounded-xl mb-4 outline-none focus:border-green-500 transition text-sm" placeholder="Turniername" />
             
-            {/* --- GEÄNDERT: Dropdown OHNE Standard Cup, T-Cup ist Standard --- */}
             <select
               value={newCupType}
               onChange={(e) => setNewCupType(e.target.value)}

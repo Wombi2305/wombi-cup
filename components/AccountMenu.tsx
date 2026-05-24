@@ -3,7 +3,7 @@
 import { supabase } from "@/lib/supabase";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image"; // 🔥 NEU IMPORTIERT
+import Image from "next/image"; 
 
 export default function AccountMenu() {
   const [user, setUser] = useState<any>(null);
@@ -51,8 +51,11 @@ export default function AccountMenu() {
 
   if (!user) return null;
 
+  // --- GEÄNDERT: Neue Rolle hinzugefügt ---
   const isAdmin = userRoles.includes("1492478735444873398");
+  const isTl = userRoles.includes("1504431450177667092"); // Turnierleitung
   const isStreamer = userRoles.includes("1493976124173062195");
+  
   const avatarUrl = user.user_metadata?.avatar_url || "/default-avatar.png";
 
   return (
@@ -80,16 +83,20 @@ export default function AccountMenu() {
             Meine Teams
           </Link>
 
-          {(isAdmin || isStreamer) && (
+          {/* --- GEÄNDERT: isTl hinzugefügt --- */}
+          {(isAdmin || isStreamer || isTl) && (
             <div className="hidden md:block border-t border-white/5 my-1" />
           )}
 
-          {(isAdmin || isStreamer) && (
+          {/* --- GEÄNDERT: isTl hinzugefügt --- */}
+          {(isAdmin || isStreamer || isTl) && (
             <Link href="/draw" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-purple-400 hover:bg-purple-500/10">
               🎰 Auslosung
             </Link>
           )}
-          {isAdmin && (
+          
+          {/* --- GEÄNDERT: Admin Panel wird nun für Orga und TL angezeigt --- */}
+          {(isAdmin || isTl) && (
             <Link href="/admin" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-blue-400 hover:bg-blue-500/10">
               👑 Admin Panel
             </Link>
