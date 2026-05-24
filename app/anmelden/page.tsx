@@ -7,6 +7,7 @@ export default function Anmelden() {
   const { tournaments, loading: tournamentsLoading, refreshTournaments } = useTournaments();
 
   const [user, setUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   
   const [teamname, setTeamname] = useState<{ [key: number]: string }>({});
   const [captain, setCaptain] = useState<{ [key: number]: string }>({});
@@ -19,13 +20,19 @@ export default function Anmelden() {
   
   const [success, setSuccess] = useState<{ [key: number]: boolean }>({});
   const [message, setMessage] = useState<string | null>(null);
+
+  const [showRolePopup, setShowRolePopup] = useState(false);
   
   const [discordUser, setDiscordUser] = useState<any>(null);
   const [isCheckingDiscord, setIsCheckingDiscord] = useState<boolean>(true);
   const [dbCheckDone, setDbCheckDone] = useState<boolean>(false);
 
-  const requiredRoleId = process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624";
-  const hasRequiredRole = discordUser?.roles?.includes(requiredRoleId);
+  // Rollen-Check
+  const requiredRoleId = String(process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624");
+  const hasDiscordRole = discordUser?.roles?.map(String).includes(requiredRoleId);
+  const hasDbRole = userProfile?.role === "teamvm" || userProfile?.role === "admin";
+  
+  const hasRequiredRole = hasDbRole || hasDiscordRole;
 
   useEffect(() => {
     const init = async () => {
@@ -34,6 +41,16 @@ export default function Anmelden() {
       setUser(currentUser);
 
       if (currentUser) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", currentUser.id)
+          .single();
+          
+        if (profile) {
+          setUserProfile(profile);
+        }
+
         const { data: teams } = await supabase
           .from("teams")
           .select("id, teamname, captain, is_active, user_id")
@@ -49,7 +66,7 @@ export default function Anmelden() {
     init();
   }, []);
 
-  // Blitzschneller Discord-Check mit Caching
+  // Discord-Check
   useEffect(() => {
     const checkDiscord = async () => {
       const userId = localStorage.getItem("discord_user_id");
@@ -156,7 +173,7 @@ export default function Anmelden() {
   const handleSubmit = async (e: any, tournamentId: number) => {
     e.preventDefault();
 
-    if (!discordUser || !hasRequiredRole || !user) {
+    if (!user || (!hasDbRole && !discordUser) || !hasRequiredRole) {
       return showMessage("Check deine Berechtigung / Eingabe");
     }
 
@@ -223,7 +240,7 @@ export default function Anmelden() {
 
   return (
     <>
-      <div className="px-4 sm:px-6 pt-10 md:pt-10 pb-16 w-full max-w-6xl mx-auto flex flex-col min-h-screen">
+      <div className="px-4 sm:px-6 pt-10 md:pt-10 pb-16 w-full max-w-6xl mx-auto flex flex-col min-h-screen relative z-10">
         
         <h1 className="text-3xl md:text-5xl font-black mb-8 md:mb-10 tracking-tight drop-shadow-lg text-white flex-shrink-0">
           Turnier <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">Anmeldung</span>
@@ -252,15 +269,11 @@ export default function Anmelden() {
               return (
                 <div 
                   key={t.id} 
-                  className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-4 transition-all duration-300 hover:-translate-y-2 hover:bg-white/10 hover:border-white/20 hover:shadow-[0_15px_40px_rgba(0,0,0,0.6)] h-fit overflow-hidden"
+                  className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-4 transition-all duration-300 hover:-translate-y-2 hover:bg-white/10 hover:border-white/20 hover:shadow-[0_15px_40px_rgba(0,0,0,0.6)] h-fit overflow-visible"
                 >
-                  {/* Sanfter Hintergrund-Glow Effekt in der Karte */}
                   <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
-                  {/* Header-Bereich mit Titel und Status-Badge */}
                   <div className="flex justify-between items-start gap-4 relative z-10">
-                    
-                    {/* --- NEU: Cup-Art Anzeige über dem Titel --- */}
                     <div className="flex flex-col">
                       <span className="text-[10px] uppercase font-black tracking-widest text-yellow-500/80 mb-1">
                         {t.cup_type === 'night_cup' ? '🌙 Night Cup' : t.cup_type === 'cup_21er' ? '🔥 21er Cup' : '🏆 T-Cup'}
@@ -270,7 +283,6 @@ export default function Anmelden() {
                       </h3>
                     </div>
                     
-                    {/* Status Badge oben rechts */}
                     <div className="shrink-0 mt-1">
                       {isReady ? (
                         <span className="px-3 py-1 bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-black tracking-widest rounded-full shadow-[0_0_10px_rgba(34,197,94,0.3)] animate-pulse">
@@ -288,7 +300,6 @@ export default function Anmelden() {
                     </div>
                   </div>
 
-                  {/* Meta-Daten mit kleinen SVG-Icons */}
                   <div className="flex flex-col gap-2 text-sm text-gray-300 font-medium relative z-10">
                     <div className="flex items-center gap-2">
                       <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -305,7 +316,6 @@ export default function Anmelden() {
                     </div>
                   </div>
 
-                  {/* Progress Bar mit Glow */}
                   <div className="relative z-10 mt-1">
                     <div className="w-full h-2.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
                       <div 
@@ -325,7 +335,6 @@ export default function Anmelden() {
                     </div>
                   </div>
 
-                  {/* Button-Area */}
                   <div className="mt-auto pt-2 relative z-10">
                     {isReady ? (
                       <div className="flex flex-col gap-3">
@@ -334,7 +343,6 @@ export default function Anmelden() {
                     ) : (
                       <div className="flex flex-col gap-3">
                         
-                        {/* Bereits angemeldete Teams */}
                         {myRegistrations.length > 0 && (
                           <div className="flex flex-col gap-2 mb-2">
                             {myRegistrations.map((reg: any) => {
@@ -360,22 +368,29 @@ export default function Anmelden() {
                           </div>
                         )}
 
-                        {/* Formular-Bereich */}
                         {(availableTeams.length > 0 || ownedTeams.length === 0) && (
                           <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 pt-4 border-t border-white/10">
                             {(!dbCheckDone || isCheckingDiscord) ? (
                               <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">
                                 Lade Berechtigung...
                               </div>
-                            ) : !user || !discordUser || !hasRequiredRole ? (
+                            ) : !user ? (
                               <a 
-                                href="https://discord.gg/Ajjx7eEdBX" 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
+                                href="/api/auth/discord"
                                 className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
                               >
-                                Discord Beitreten
+                                Mit Discord Login
                               </a>
+                            ) : !hasRequiredRole ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowRolePopup(true)}
+                                  className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500 hover:text-white shadow-[0_0_15px_rgba(239,68,68,0.2)] hover:-translate-y-0.5 text-center block"
+                                >
+                                  Team VM Rolle fehlt
+                                </button>
+                              </>
                             ) : (
                               <>
                                 {ownedTeams.length > 0 ? (
@@ -441,6 +456,51 @@ export default function Anmelden() {
           </div>
         )}
       </div>
+
+      {/* POPUP WURDE HIERHER VERSCHOBEN UND MIT ANIMATIONEN VERBESSERT */}
+      {showRolePopup && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-[2rem] bg-[#0f0f14] border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] p-6 md:p-8 animate-in zoom-in-95 duration-300">
+            
+            <button
+              onClick={() => setShowRolePopup(false)}
+              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition-all"
+            >
+              ✕
+            </button>
+
+            <div className="flex flex-col gap-6">
+              <div>
+                <h2 className="text-2xl font-black text-white mb-4">
+                  Rolle fehlt
+                </h2>
+
+                <p className="text-gray-300 leading-relaxed text-base">
+                  Ihr müsst euch zuerst die Rolle{" "}
+                  <span className="text-yellow-400 font-bold">
+                    „Team VM“ 🏆
+                  </span>{" "}
+                  im Channel{" "}
+                  <span className="text-blue-400 font-bold">
+                    #✅┃Beitreten
+                  </span>{" "}
+                  holen und euch anschließend auf der Website mit Discord
+                  einloggen und euer Team anmelden oder ein neues erstellen.
+                </p>
+              </div>
+
+              <a
+                href="https://discord.gg/XJCZYWKQMm"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full p-4 rounded-2xl bg-[#5865F2] hover:bg-[#4752C4] text-white font-black uppercase tracking-widest text-sm text-center transition-all hover:-translate-y-0.5 shadow-[0_0_20px_rgba(88,101,242,0.4)]"
+              >
+                Zum Beitreten Channel
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {message && <div className="fixed top-24 right-4 bg-black/90 text-white px-6 py-4 rounded-2xl shadow-2xl z-50 animate-in slide-in-from-top-4 border border-white/10 backdrop-blur-md font-bold">{message}</div>}
     </>
