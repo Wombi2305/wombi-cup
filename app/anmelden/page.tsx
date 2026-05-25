@@ -399,7 +399,7 @@ export default function Anmelden() {
                             }}
                             className="w-full p-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all bg-[#5865F2] hover:bg-[#4752C4] text-white shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:-translate-y-0.5 text-center block"
                           >
-                            Mit Discord Login
+                            Login mit Discord
                           </button>
                             ) : !hasRequiredRole ? (
                               <>
