@@ -52,7 +52,7 @@ export default function AccountMenu() {
   if (!user) return null;
 
   const isAdmin = userRoles.includes("1492478735444873398");
-  const isTl = userRoles.includes("1504431450177667092"); // Turnierleitung
+  const isTl = userRoles.includes("1504431450177667092");
   const isStreamer = userRoles.includes("1493976124173062195");
   
   const avatarUrl = user.user_metadata?.avatar_url || "/default-avatar.png";
@@ -74,32 +74,35 @@ export default function AccountMenu() {
       </div>
 
       {open && (
-        <div className="md:absolute md:right-0 md:top-full mt-2 md:mt-4 w-full md:w-56 bg-black/95 backdrop-blur-xl border border-yellow-500/10 rounded-xl shadow-2xl overflow-hidden py-1 z-[100]">
-          {/* --- GEÄNDERT: hidden md:block entfernt, Padding für Mobile angepasst --- */}
-          <Link href="/profil" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
+        <div className="md:absolute md:right-0 md:top-full mt-2 md:mt-4 w-full md:w-56 md:bg-black/95 md:backdrop-blur-xl md:border md:border-yellow-500/10 md:rounded-xl md:shadow-2xl overflow-hidden py-1 z-[100] bg-transparent border-none">
+          
+          {/* hidden md:block sorgt dafür, dass diese Links am Handy unsichtbar sind, aber am PC erhalten bleiben */}
+          <Link href="/profil" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
             Profil
           </Link>
-          <Link href="/meine-teams" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
+          <Link href="/meine-teams" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
             Meine Teams
           </Link>
 
           {(isAdmin || isStreamer || isTl) && (
-            <div className="border-t border-white/5 my-1" />
+            <div className="hidden md:block border-t border-white/5 my-1" />
           )}
 
           {(isAdmin || isStreamer || isTl) && (
-            <Link href="/draw" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-purple-400 hover:bg-purple-500/10">
+            <Link href="/draw" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-purple-400 hover:bg-purple-500/10">
               🎰 Auslosung
             </Link>
           )}
           
           {(isAdmin || isTl) && (
-            <Link href="/admin" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-blue-400 hover:bg-blue-500/10">
+            <Link href="/admin" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-blue-400 hover:bg-blue-500/10">
               👑 Admin Panel
             </Link>
           )}
 
-          <div className="border-t border-white/5 my-1" />
+          <div className="hidden md:block border-t border-white/5 my-1" />
+          
+          {/* Der Logout ist das einzige Element, das auf Mobile ('block') sichtbar bleibt */}
           <button onClick={() => supabase.auth.signOut().then(() => window.location.reload())} className="block w-full text-center md:text-left px-4 py-3 md:py-2 text-red-400 hover:bg-red-500/10 transition">
             Logout
           </button>

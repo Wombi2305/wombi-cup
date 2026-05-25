@@ -18,7 +18,6 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   
-  // Auth & Roles States (Wird für das mobile Menü gebraucht)
   const [user, setUser] = useState<any>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
 
@@ -65,11 +64,9 @@ export default function Navbar() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  // 🔥 NEU: Hilfsfunktion für den dynamischen Login von JEDER beliebigen Seite aus
   const handleNavbarDiscordLogin = async () => {
     try {
       const origin = window.location.origin;
-      // Holt den exakten aktuellen Pfad inklusive Query-Parameter (?id=...)
       const currentPath = window.location.pathname + window.location.search;
       const redirectUrl = `${origin}/auth/callback?next=${encodeURIComponent(currentPath)}`;
 
@@ -86,14 +83,17 @@ export default function Navbar() {
 
   const ORGA_ROLE = "1492478735444873398";
   const STREAMER_ROLE = "1493976124173062195";
+  const TL_ROLE = "1504431450177667092";
+
   const isAdmin = userRoles.includes(ORGA_ROLE);
-  const canSeeDraw = isAdmin || userRoles.includes(STREAMER_ROLE);
+  const isTl = userRoles.includes(TL_ROLE);
+  const canSeeDraw = isAdmin || isTl || userRoles.includes(STREAMER_ROLE);
+  const canSeeAdmin = isAdmin || isTl;
 
   return (
     <nav className="fixed top-0 left-0 w-full z-[100] bg-black/70 backdrop-blur-xl border-b border-white/5 shadow-[0_4px_30px_rgba(0,0,0,0.1)] pointer-events-auto transition-all">
       <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
         
-        {/* 1. LINKS: LOGO */}
         <div className="flex-1 flex items-center justify-start">
           <Link href="/" className="group flex items-center gap-3 relative z-10 outline-none">
             <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-400 to-amber-600 shadow-lg shadow-yellow-500/20 group-hover:shadow-yellow-500/40 group-hover:scale-105 transition-all duration-300">
@@ -112,7 +112,6 @@ export default function Navbar() {
           </Link>
         </div>
 
-        {/* 2. MITTE: DESKTOP NAVIGATION */}
         <div className="hidden lg:flex flex-auto items-center justify-center">
           <div className="flex items-center gap-1 bg-white/5 p-1.5 rounded-full border border-white/10 overflow-hidden">
             {MAIN_LINKS.map((link) => {
@@ -134,14 +133,12 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* 3. RECHTS: PROFIL & MOBILE BUTTON */}
         <div className="flex-1 flex items-center justify-end gap-4 relative z-10">
           <div className="hidden md:flex items-center gap-4 bg-white/5 px-4 py-2 rounded-full border border-white/10">
             <AccountMenu />
             {user ? null : (
               <>
                 <div className="w-px h-6 bg-white/10"></div>
-                {/* 🔥 HIER GEÄNDERT: Wir übergeben die neue dynamische Funktion als Klick-Handler, falls die Komponente das unterstützt, oder rufen sie direkt auf */}
                 <div onClick={handleNavbarDiscordLogin}>
                   <DiscordLogin />
                 </div>
@@ -164,7 +161,6 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* MOBILE MENU */}
       {open && (
         <div className="lg:hidden absolute top-full left-0 w-full bg-black/95 backdrop-blur-2xl border-t border-white/10 px-6 py-8 h-[calc(100dvh-5rem)] overflow-y-auto flex flex-col gap-6 shadow-2xl pb-12">
           
@@ -200,7 +196,7 @@ export default function Navbar() {
                   </Link>
                 )}
                 
-                {isAdmin && (
+                {canSeeAdmin && (
                   <Link href="/admin" onClick={() => setOpen(false)} className="flex items-center px-4 py-3 rounded-xl text-md font-medium text-blue-400 hover:bg-blue-500/10 transition-all">
                     👑 Admin Panel
                   </Link>
@@ -211,7 +207,6 @@ export default function Navbar() {
 
           <div className="pt-8 flex flex-col gap-4">
             <AccountMenu />
-            {/* 🔥 HIER GEÄNDERT: Auch im mobilen Menü den dynamischen Klick-Handler nutzen */}
             {!user && (
               <div onClick={handleNavbarDiscordLogin}>
                 <DiscordLogin />
