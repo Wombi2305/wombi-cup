@@ -109,7 +109,6 @@ const getTierStyles = (level: number) => {
   return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
 };
 
-// 🔥 HELPER: Generiert ein sicheres kryptisches Token
 const generateSecureToken = (length = 16) => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let token = "";
@@ -164,6 +163,7 @@ function MeineTeamsContent() {
   const [teamname, setTeamname] = useState("");
   const [captain, setCaptain] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [twitchUrl, setTwitchUrl] = useState("");
 
   const [members, setMembers] = useState<any[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
@@ -214,6 +214,7 @@ function MeineTeamsContent() {
         setTeamname(activeTeam.teamname || "");
         setCaptain(activeTeam.captain || "");
         setLogoUrl(activeTeam.logo_url || "");
+        setTwitchUrl(activeTeam.twitch_url || "");
       } else {
         setIsCreating(true);
       }
@@ -225,6 +226,10 @@ function MeineTeamsContent() {
   }, []);
 
   const currentTeam = useMemo(() => allTeams.find(t => t.id === selectedTeamId), [allTeams, selectedTeamId]);
+
+  useEffect(() => {
+    if (currentTeam) setTwitchUrl(currentTeam.twitch_url || "");
+  }, [currentTeam]);
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -300,11 +305,13 @@ function MeineTeamsContent() {
       setTeamname("");
       setCaptain("");
       setLogoUrl("");
+      setTwitchUrl("");
     } else {
       setSelectedTeamId(team.id);
       setTeamname(team.teamname || "");
       setCaptain(team.captain || "");
       setLogoUrl(team.logo_url || "");
+      setTwitchUrl(team.twitch_url || "");
     }
   }, [setActiveTab]);
 
@@ -547,6 +554,33 @@ function MeineTeamsContent() {
     }
   };
 
+  const handleSaveTwitch = async () => {
+    if (!selectedTeamId) return;
+
+    const trimmedUrl = twitchUrl.trim();
+    
+    // Validiere, ob es leer ist oder ein gültiger Twitch-Link ist
+    if (trimmedUrl !== "") {
+      const twitchRegex = /^(https?:\/\/)?(www\.)?twitch\.tv\/[a-zA-Z0-9_]+(\/)?$/i;
+      if (!twitchRegex.test(trimmedUrl)) {
+        showMessage("❌ Bitte gib einen gültigen Link ein (z.B. https://twitch.tv/kanalname)");
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('teams').update({ twitch_url: trimmedUrl }).eq('id', selectedTeamId);
+      if (error) throw error;
+      setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, twitch_url: trimmedUrl } : t));
+      showMessage("✅ Twitch-Link erfolgreich gespeichert!");
+    } catch {
+      showMessage("❌ Fehler beim Speichern des Twitch-Links.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isCreating) return;
@@ -680,9 +714,7 @@ function MeineTeamsContent() {
   if (loading) return <div className="min-h-screen flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
   if (!user) return <div className="min-h-screen flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
 
-  // 🔥 HIER ANGEPASST: Prüft direkt den Text in deiner 'role' Spalte
-const hasTeamVMRole = profile?.role === 'teamvm';
-
+  const hasTeamVMRole = profile?.role === 'teamvm';
   const ownedTeams = allTeams.filter(t => t.myRole === 'captain');
   const joinedTeams = allTeams.filter(t => t.myRole !== 'captain');
 
@@ -757,7 +789,6 @@ const hasTeamVMRole = profile?.role === 'teamvm';
                     }} 
                   />
                 </div>
-
               </div>
             )}
           </div>
@@ -790,7 +821,6 @@ const hasTeamVMRole = profile?.role === 'teamvm';
                       </button>
                     ))}
                     
-                    {/* 🔥 NEU: Der "+ Neu" Button wird nur angezeigt, wenn der User die Rolle hat */}
                     {hasTeamVMRole && (
                       <button onClick={() => handleSelectTeam(null, true)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${isCreating ? "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20" : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/5"}`}>
                         <span className="text-base leading-none">+</span> Neu
@@ -964,8 +994,42 @@ const hasTeamVMRole = profile?.role === 'teamvm';
                     })()}
                   </div>
 
+                  {/* 🔥 Twitch Sektion */}
+                  <div className="bg-black/20 border border-purple-500/20 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                    <div className="flex-1 w-full space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold ml-1 flex items-center gap-1.5">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" className="text-purple-500">
+                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                        </svg>
+                        Twitch Stream
+                      </label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={twitchUrl} 
+                          onChange={(e) => setTwitchUrl(e.target.value)} 
+                          placeholder="https://twitch.tv/..." 
+                          disabled={currentTeam.myRole !== 'captain'}
+                          className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50" 
+                        />
+                        {currentTeam.myRole === 'captain' && (
+                          <button onClick={handleSaveTwitch} disabled={saving} className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30 transition-colors shrink-0">
+                            Speichern
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {currentTeam.twitch_url && (
+                      <div className="shrink-0 flex items-center w-full sm:w-auto justify-end">
+                        <a href={currentTeam.twitch_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(147,51,234,0.4)] transition-colors w-full sm:w-auto justify-center">
+                          <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span> Zum Stream
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
                   {currentTeam.team_rewards && currentTeam.team_rewards.some((r:any) => !r.custom_rewards?.type || r.custom_rewards?.type === 'badge') && (
-                    <div className="mt-6 border-t border-white/10 pt-5">
+                    <div className="mt-2 border-t border-white/10 pt-5">
                       <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">
                         Freigeschaltete Abzeichen & Erfolge
                       </h4>
@@ -1367,9 +1431,12 @@ const hasTeamVMRole = profile?.role === 'teamvm';
           </div>
         </div>
 
-        {message && <div className="fixed top-24 right-4 sm:right-6 bg-[#111] text-white px-6 py-4 rounded-xl shadow-2xl z-50 animate-in fade-in slide-in-from-top-4 border border-white/10 backdrop-blur-md flex items-center gap-3 font-medium">
-          {message}
-        </div>}
+        {/* 🔥 HIER IST DIE NEUE SNACKBAR */}
+        {message && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#111] text-white px-6 py-3 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-[150] animate-in fade-in slide-in-from-bottom-6 border border-white/10 backdrop-blur-md flex items-center gap-3 font-medium text-sm whitespace-nowrap">
+            {message}
+          </div>
+        )}
       </div>
 
       {/* --- ADD MEMBER MODAL --- */}
