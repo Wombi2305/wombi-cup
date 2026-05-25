@@ -22,17 +22,12 @@ export default function DiscordLogin() {
 
       if (discordId) {
         localStorage.setItem("discord_user_id", discordId);
-
         try {
-          // 🚀 DATEN DIREKT VON DER API HOLEN
-          // Hinweis: Die API Route kümmert sich serverseitig bereits um den Upsert in die profiles Tabelle!
-          // Wir rufen sie hier nur auf, um den Vorgang nach dem Login einmal anzustoßen.
           await fetch(`/api/discord/member?userId=${discordId}`);
         } catch (err) {
           console.error("Fehler beim Abrufen der Discord-Daten:", err);
         }
       }
-
       setLoading(false);
     };
 
@@ -54,25 +49,33 @@ export default function DiscordLogin() {
   }, []);
 
   const login = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "discord",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (error) console.error("Login Error:", error);
+    try {
+      // Dynamische Redirect-URL erstellen, damit der User nach Login auf der aktuellen Seite bleibt
+      const origin = window.location.origin;
+      const currentPath = window.location.pathname + window.location.search;
+      const redirectUrl = `${origin}/auth/callback?next=${encodeURIComponent(currentPath)}`;
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error("Login Error:", error);
+    }
   };
 
-  // 🔥 Solange die Daten noch geladen werden, zeige gar nichts an.
-  if (loading) return null;
-  if (user) return null;
+  // Wenn geladen wird oder User eingeloggt ist, rendern wir nichts (Navbar zeigt dann das AccountMenu)
+  if (loading || user) return null;
 
   return (
     <button
       onClick={login}
-      className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 transition-colors px-4 py-2 rounded-lg text-white font-medium flex justify-center items-center"
+      className="bg-[#5865F2] hover:bg-[#4752C4] text-white px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-widest transition-all duration-300 shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:shadow-[0_0_25px_rgba(88,101,242,0.5)] hover:-translate-y-0.5"
     >
-      Login mit Discord
+      Mit Discord Login
     </button>
   );
 }
