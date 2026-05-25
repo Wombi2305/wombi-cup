@@ -515,7 +515,7 @@ export default function Anmelden() {
                 rel="noopener noreferrer"
                 className="w-full p-4 rounded-2xl bg-[#5865F2] hover:bg-[#4752C4] text-white font-black uppercase tracking-widest text-sm text-center transition-all hover:-translate-y-0.5 shadow-[0_0_20px_rgba(88,101,242,0.4)]"
               >
-                Zum Beitreten Channel
+                Zum Channel #✅┃Beitreten
               </a>
             </div>
           </div>
