@@ -34,12 +34,15 @@ export async function GET(req: Request) {
     const STREAMER = "1493976124173062195";
     const TEAMVM = "1492462340787011624";
     const FREEAGENT = "1492462347967664198";
+    const TURNIERLEITUNG = "1504431450177667092";
 
     // Standard-Rolle ist "spieler", wird überschrieben, wenn was Höheres zutrifft
     let role = "spieler"; 
 
     if (roles.includes(ORGA)) {
       role = "orga";
+    }else if (roles.includes(TURNIERLEITUNG)) {
+      role = "turnierleitung";
     } else if (roles.includes(STREAMER)) {
       role = "streamer";
     } else if (roles.includes(TEAMVM)) {
