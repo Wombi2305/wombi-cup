@@ -163,12 +163,18 @@ function MeineTeamsContent() {
   const [teamname, setTeamname] = useState("");
   const [captain, setCaptain] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
-  const [twitchUrl, setTwitchUrl] = useState("");
+  const [twitchUrl, setTwitchUrl] = useState(""); 
 
   const [members, setMembers] = useState<any[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [inviteUrlState, setInviteUrlState] = useState(""); 
+
+  // Slot-Machine States
+  const [showSlotModal, setShowSlotModal] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [spinDisplay, setSpinDisplay] = useState("🎰");
+  const [slotPrize, setSlotPrize] = useState<{message: string, icon: string, color: string} | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -423,6 +429,59 @@ function MeineTeamsContent() {
     }
   };
 
+  const startSlotMachine = async () => {
+    if (!selectedTeamId || !currentTeam) return;
+
+    setIsSpinning(true);
+    setSlotPrize(null);
+
+    const icons = ["✨", "🎟️", "🚀", "🎁", "🔥", "💎", "🎰", "⭐"];
+    let i = 0;
+    const spinInterval = setInterval(() => {
+      setSpinDisplay(icons[i % icons.length]);
+      i++;
+    }, 100);
+
+    try {
+      const newRandomTickets = currentTeam.random_tickets - 1;
+      const roll = Math.random();
+      let updates: any = { random_tickets: newRandomTickets };
+      let prizeData = { message: "", icon: "", color: "" };
+
+      if (roll < 0.60) {
+        updates.active_xp_boosts = (currentTeam.active_xp_boosts || 0) + 8;
+        prizeData = { message: "8-Spiele XP-Boost!", icon: "🚀", color: "text-purple-400" };
+      } else if (roll < 0.85) {
+        updates.feature_tickets = (currentTeam.feature_tickets || 0) + 1;
+        prizeData = { message: "Feature Match Ticket!", icon: "📺", color: "text-orange-400" };
+      } else if (roll < 0.95) {
+        updates.waitlist_tickets = (currentTeam.waitlist_tickets || 0) + 1;
+        prizeData = { message: "Warteliste-Skip Ticket!", icon: "🎟️", color: "text-blue-400" };
+      } else {
+        updates.active_xp_boosts = (currentTeam.active_xp_boosts || 0) + 8;
+        updates.feature_tickets = (currentTeam.feature_tickets || 0) + 1;
+        updates.waitlist_tickets = (currentTeam.waitlist_tickets || 0) + 1;
+        prizeData = { message: "JACKPOT! Alles auf einmal!", icon: "🎰", color: "text-yellow-400" };
+      }
+
+      const { error } = await supabase.from('teams').update(updates).eq('id', selectedTeamId);
+      if (error) throw error;
+
+      setTimeout(() => {
+        clearInterval(spinInterval);
+        setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, ...updates } : t));
+        setSlotPrize(prizeData);
+        setIsSpinning(false);
+      }, 2500);
+
+    } catch (error) {
+      clearInterval(spinInterval);
+      setIsSpinning(false);
+      setShowSlotModal(false);
+      showMessage("❌ Fehler beim Öffnen der Lootbox.");
+    }
+  };
+
   const handleRedeemTicket = async (ticketColumn: string, rewardName: string) => {
     if (!selectedTeamId || !currentTeam) return;
     
@@ -433,6 +492,12 @@ function MeineTeamsContent() {
 
     if (ticketColumn === 'waitlist_tickets') {
       openWaitlistModal();
+      return;
+    }
+
+    if (ticketColumn === 'random_tickets') {
+      setShowSlotModal(true);
+      startSlotMachine();
       return;
     }
 
@@ -455,43 +520,6 @@ function MeineTeamsContent() {
         showMessage("❌ Fehler beim Einlösen.");
       } finally {
         setSaving(false); 
-      }
-      return;
-    }
-
-    if (ticketColumn === 'random_tickets') {
-      setSaving(true);
-      try {
-        const newRandomTickets = currentTeam.random_tickets - 1;
-        const roll = Math.random();
-        let updates: any = { random_tickets: newRandomTickets };
-        let rewardMessage = "";
-
-        if (roll < 0.60) {
-          updates.active_xp_boosts = (currentTeam.active_xp_boosts || 0) + 8;
-          rewardMessage = "🎉 Glückwunsch! Du hast einen 8-Spiele XP-Boost gezogen!";
-        } else if (roll < 0.85) {
-          updates.feature_tickets = (currentTeam.feature_tickets || 0) + 1;
-          rewardMessage = "🎉 Glückwunsch! Du hast ein Feature Match Ticket gezogen!";
-        } else if (roll < 0.95) {
-          updates.waitlist_tickets = (currentTeam.waitlist_tickets || 0) + 1;
-          rewardMessage = "🎉 Glückwunsch! Du hast ein Warteliste-Skip Ticket gezogen!";
-        } else {
-          updates.active_xp_boosts = (currentTeam.active_xp_boosts || 0) + 8;
-          updates.feature_tickets = (currentTeam.feature_tickets || 0) + 1;
-          updates.waitlist_tickets = (currentTeam.waitlist_tickets || 0) + 1;
-          rewardMessage = "🎰 JACKPOT! 8-Spiele XP-Boost + Feature Match + Warteliste-Skip!";
-        }
-
-        const { error } = await supabase.from('teams').update(updates).eq('id', selectedTeamId);
-        if (error) throw error;
-        
-        setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, ...updates } : t));
-        showMessage(rewardMessage);
-      } catch (error) {
-        showMessage("❌ Fehler beim Öffnen der Lootbox.");
-      } finally {
-        setSaving(false);
       }
       return;
     }
@@ -559,7 +587,6 @@ function MeineTeamsContent() {
 
     const trimmedUrl = twitchUrl.trim();
     
-    // Validiere, ob es leer ist (Erlaubt das Löschen des Links) oder ein gültiger Twitch-Link ist
     if (trimmedUrl !== "") {
       const twitchRegex = /^(https?:\/\/)?(www\.)?twitch\.tv\/[a-zA-Z0-9_]+(\/)?$/i;
       if (!twitchRegex.test(trimmedUrl)) {
@@ -938,7 +965,7 @@ function MeineTeamsContent() {
                           <div className="mt-4 flex items-center justify-center gap-2">
                             <div className="bg-purple-500/20 border border-purple-500/40 px-4 py-1.5 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)]">
                               <span className="text-[11px] font-black uppercase tracking-widest text-purple-300">
-                                XP Boost active für <span className="text-white text-sm mx-1">{currentTeam.active_xp_boosts}</span> Spiele
+                                XP Boost aktiv für <span className="text-white text-sm mx-1">{currentTeam.active_xp_boosts}</span> Spiele
                               </span>
                             </div>
                           </div>
@@ -994,38 +1021,36 @@ function MeineTeamsContent() {
                     })()}
                   </div>
 
-                  {/* 🔥 Twitch Sektion */}
-                  <div className="bg-black/20 border border-purple-500/20 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                    <div className="flex-1 w-full space-y-1">
-                      <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold ml-1 flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" className="text-purple-500">
-                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
-                        </svg>
-                        Twitch Stream
-                      </label>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          value={twitchUrl} 
-                          onChange={(e) => setTwitchUrl(e.target.value)} 
-                          placeholder="https://twitch.tv/..." 
-                          disabled={currentTeam.myRole === 'spieler'}
-                          className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50" 
-                        />
+                  {/* 🔥 Twitch Sektion - MIT NEUEM LAYOUT */}
+                  <div className="bg-black/20 border border-purple-500/20 rounded-2xl p-4 flex flex-col gap-3">
+                    <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold ml-1 flex items-center gap-1.5">
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" className="text-purple-500">
+                        <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                      </svg>
+                      Twitch Stream
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full">
+                      <input 
+                        type="text" 
+                        value={twitchUrl} 
+                        onChange={(e) => setTwitchUrl(e.target.value)} 
+                        placeholder="https://twitch.tv/..." 
+                        disabled={currentTeam.myRole === 'spieler'}
+                        className="flex-1 h-10 bg-black/50 border border-white/10 rounded-xl px-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50" 
+                      />
+                      <div className="flex gap-2 shrink-0 w-full sm:w-auto">
                         {currentTeam.myRole !== 'spieler' && (
-                          <button onClick={handleSaveTwitch} disabled={saving} className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30 transition-colors shrink-0">
+                          <button onClick={handleSaveTwitch} disabled={saving} className="flex-1 sm:flex-none h-10 px-5 flex items-center justify-center bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-xl text-xs font-bold hover:bg-purple-500/30 transition-colors whitespace-nowrap">
                             Speichern
                           </button>
                         )}
+                        {currentTeam.twitch_url && (
+                          <a href={currentTeam.twitch_url} target="_blank" rel="noreferrer" className="flex-1 sm:flex-none h-10 px-5 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(147,51,234,0.4)] transition-colors whitespace-nowrap">
+                            <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span> Zum Stream
+                          </a>
+                        )}
                       </div>
                     </div>
-                    {currentTeam.twitch_url && (
-                      <div className="shrink-0 flex items-center w-full sm:w-auto justify-end">
-                        <a href={currentTeam.twitch_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(147,51,234,0.4)] transition-colors w-full sm:w-auto justify-center">
-                          <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span> Zum Stream
-                        </a>
-                      </div>
-                    )}
                   </div>
 
                   {currentTeam.team_rewards && currentTeam.team_rewards.some((r:any) => !r.custom_rewards?.type || r.custom_rewards?.type === 'badge') && (
@@ -1530,6 +1555,40 @@ function MeineTeamsContent() {
             <div className="flex justify-end">
               <button onClick={() => setShowWaitlistModal(false)} className="w-full sm:w-auto bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-8 rounded-xl transition-colors">Abbrechen</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- 🔥 SLOT MACHINE MODAL --- */}
+      {showSlotModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 backdrop-blur-md px-4">
+          <div className="bg-[#0a0a0a] border border-fuchsia-500/30 rounded-3xl p-8 w-full max-w-sm shadow-[0_0_80px_rgba(217,70,239,0.2)] animate-in zoom-in-95 transform-gpu text-center flex flex-col items-center">
+            <h3 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-purple-600 mb-2">Mystery Loot</h3>
+            
+
+            {/* Slot Window */}
+            <div className="w-full bg-black/80 border-4 border-black rounded-2xl p-6 shadow-inner relative overflow-hidden mb-8 h-40 flex items-center justify-center">
+              <div className="absolute inset-0 bg-fuchsia-500/10 animate-pulse"></div>
+
+              {isSpinning ? (
+                <div className="text-6xl animate-bounce drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">
+                  {spinDisplay}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center animate-in zoom-in spin-in-1">
+                  <span className="text-6xl drop-shadow-[0_0_20px_rgba(250,204,21,0.6)] mb-4">{slotPrize?.icon}</span>
+                  <span className={`text-lg font-black uppercase tracking-wider ${slotPrize?.color} drop-shadow-md`}>
+                    {slotPrize?.message}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {!isSpinning && (
+              <button onClick={() => setShowSlotModal(false)} className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-3.5 rounded-xl transition-colors shadow-[0_0_15px_rgba(217,70,239,0.4)]">
+                Einsammeln
+              </button>
+            )}
           </div>
         </div>
       )}
