@@ -559,7 +559,7 @@ function MeineTeamsContent() {
 
     const trimmedUrl = twitchUrl.trim();
     
-    // Validiere, ob es leer ist oder ein gültiger Twitch-Link ist
+    // Validiere, ob es leer ist (Erlaubt das Löschen des Links) oder ein gültiger Twitch-Link ist
     if (trimmedUrl !== "") {
       const twitchRegex = /^(https?:\/\/)?(www\.)?twitch\.tv\/[a-zA-Z0-9_]+(\/)?$/i;
       if (!twitchRegex.test(trimmedUrl)) {
@@ -1009,10 +1009,10 @@ function MeineTeamsContent() {
                           value={twitchUrl} 
                           onChange={(e) => setTwitchUrl(e.target.value)} 
                           placeholder="https://twitch.tv/..." 
-                          disabled={currentTeam.myRole !== 'captain'}
+                          disabled={currentTeam.myRole === 'spieler'}
                           className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50" 
                         />
-                        {currentTeam.myRole === 'captain' && (
+                        {currentTeam.myRole !== 'spieler' && (
                           <button onClick={handleSaveTwitch} disabled={saving} className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30 transition-colors shrink-0">
                             Speichern
                           </button>
