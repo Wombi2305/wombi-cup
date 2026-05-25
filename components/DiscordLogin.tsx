@@ -1,81 +1,1552 @@
 "use client";
 
+import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { useEffect, useState } from "react";
+import Image from "next/image"; 
+import TeamCard from "@/components/TeamCard"; 
+import { COSMETIC_COLORS, COSMETIC_BORDERS } from "@/lib/cosmetics"; 
 
-export default function DiscordLogin() {
+const resizeImage = (file: File, maxWidth = 400, maxHeight = 400): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new window.Image(); 
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height *= maxWidth / width));
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width *= maxHeight / height));
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".webp"), {
+                type: "image/webp",
+                lastModified: Date.now(),
+              });
+              resolve(newFile);
+            } else {
+              reject(new Error("Bildkonvertierung fehlgeschlagen"));
+            }
+          },
+          "image/webp",
+          0.8
+        );
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
+
+const getRequiredXpForLevel = (level: number) => {
+  if (level < 11) return Math.floor(50 + (level - 1) * (70 / 9)); 
+  if (level < 21) return Math.floor(130 + (level - 11) * (70 / 9));
+  if (level < 36) return Math.floor(210 + (level - 21) * (110 / 14));
+  if (level < 46) return Math.floor(330 + (level - 36) * (120 / 9));
+  if (level === 46) return 500;
+  if (level === 47) return 550;
+  if (level === 48) return 600;
+  if (level === 49) return 650;
+  return 700;
+};
+
+const getTeamStatsUI = (team: any) => {
+  if (!team) return { level: 1, totalXp: 0, progress: 0, currentLevelXp: 0, requiredLevelXp: 50, tierImage: "/Bronze.png" };
+
+  const totalXp = team.total_xp || 0;
+  const level = team.level || 1;
+
+  let xpForPreviousLevels = 0;
+  for (let i = 1; i < level; i++) {
+    xpForPreviousLevels += getRequiredXpForLevel(i);
+  }
+
+  const currentLevelXp = Math.max(0, totalXp - xpForPreviousLevels);
+  const requiredLevelXp = getRequiredXpForLevel(level);
+  const progress = level === 50 ? 100 : Math.min(100, Math.max(0, (currentLevelXp / requiredLevelXp) * 100));
+
+  let tierImage = "/Bronze.png";
+  if (level >= 45) tierImage = "/Prisma.png";
+  else if (level >= 40) tierImage = "/Amethyst.png";
+  else if (level >= 35) tierImage = "/Sapphire.png";
+  else if (level >= 30) tierImage = "/Emerald.png";
+  else if (level >= 25) tierImage = "/Ruby.png";
+  else if (level >= 20) tierImage = "/Gold.png";
+  else if (level >= 10) tierImage = "/Silber.png";
+
+  return { level, totalXp, progress, currentLevelXp, requiredLevelXp, tierImage };
+};
+
+const getTierStyles = (level: number) => {
+  const l = level || 1;
+  if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
+  if (l >= 40) return { bg: "bg-purple-500/20", border: "border-purple-500/40", text: "text-purple-50" };
+  if (l >= 35) return { bg: "bg-blue-500/20", border: "border-blue-500/40", text: "text-blue-50" };
+  if (l >= 30) return { bg: "bg-emerald-500/20", border: "border-emerald-500/40", text: "text-emerald-50" };
+  if (l >= 25) return { bg: "bg-red-500/20", border: "border-red-500/40", text: "text-red-50" };
+  if (l >= 20) return { bg: "bg-yellow-500/20", border: "border-yellow-500/40", text: "text-yellow-50" };
+  if (l >= 10) return { bg: "bg-slate-400/20", border: "border-slate-400/40", text: "text-slate-50" };
+  return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
+};
+
+const generateSecureToken = (length = 16) => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let token = "";
+  for (let i = 0; i < length; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+};
+
+function MeineTeamsContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const tabParam = searchParams.get("tab");
+  const activeTab = (tabParam === "inventory" || tabParam === "members") ? tabParam : "overview";
+
+  const setActiveTab = useCallback((tab: "overview" | "inventory" | "members") => {
+    const params = new URLSearchParams(searchParams.toString());
+    
+    if (tab === "overview") {
+      params.delete("tab"); 
+    } else {
+      params.set("tab", tab);
+    }
+
+    const queryString = params.toString();
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    
+    router.push(newUrl, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [allTeams, setAllTeams] = useState<any[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  
+  const [cosmeticTab, setCosmeticTab] = useState<"banner" | "color" | "border">("banner");
+  const [pendingCosmetics, setPendingCosmetics] = useState<{banner?: string, color?: string, border?: string, background?: string}>({});
+  
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [waitlistData, setWaitlistData] = useState<any[]>([]);
+  const [loadingWaitlist, setLoadingWaitlist] = useState(false);
+  const [teamname, setTeamname] = useState("");
+  const [captain, setCaptain] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [twitchUrl, setTwitchUrl] = useState("");
+
+  const [members, setMembers] = useState<any[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [inviteUrlState, setInviteUrlState] = useState(""); 
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data } = await supabase.auth.getUser();
-
-      if (!data.user) {
-        setUser(null);
+    const fetchData = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData.user;
+      
+      if (!currentUser) {
         setLoading(false);
         return;
       }
+      setUser(currentUser);
 
-      setUser(data.user);
-      const discordId = data.user.user_metadata?.provider_id;
+      const [profileRes, ownedTeamsRes, memberTeamsRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("id", currentUser.id).single(),
+        supabase.from("teams").select("*, team_rewards(id, unlocked_at, custom_rewards(*))").eq("user_id", currentUser.id).eq("is_deleted", false).order("created_at", { ascending: true }),
+        supabase.from("team_members").select("role, teams(*, team_rewards(id, unlocked_at, custom_rewards(*)))").eq("user_id", currentUser.id)
+      ]);
 
-      if (discordId) {
-        localStorage.setItem("discord_user_id", discordId);
-        try {
-          await fetch(`/api/discord/member?userId=${discordId}`);
-        } catch (err) {
-          console.error("Fehler beim Abrufen der Discord-Daten:", err);
-        }
+      if (profileRes.data) setProfile(profileRes.data);
+
+      let mergedTeams: any[] = [];
+
+      if (ownedTeamsRes.data) {
+        ownedTeamsRes.data.forEach(t => {
+          mergedTeams.push({ ...t, myRole: 'captain' });
+        });
       }
+
+      if (memberTeamsRes.data) {
+        memberTeamsRes.data.forEach((mt: any) => {
+          const t = mt.teams;
+          if (t && !t.is_deleted && t.user_id !== currentUser.id) {
+            mergedTeams.push({ ...t, myRole: mt.role });
+          }
+        });
+      }
+
+      if (mergedTeams.length > 0) {
+        setAllTeams(mergedTeams);
+        const activeTeam = mergedTeams.find((t: any) => t.is_active) || mergedTeams[0];
+        setIsCreating(false);
+        setSelectedTeamId(activeTeam.id);
+        setTeamname(activeTeam.teamname || "");
+        setCaptain(activeTeam.captain || "");
+        setLogoUrl(activeTeam.logo_url || "");
+        setTwitchUrl(activeTeam.twitch_url || "");
+      } else {
+        setIsCreating(true);
+      }
+
       setLoading(false);
     };
 
-    getUser();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        const sessionUser = session?.user ?? null;
-        setUser(sessionUser);
-        if (sessionUser?.user_metadata?.provider_id) {
-          localStorage.setItem("discord_user_id", sessionUser.user_metadata.provider_id);
-        }
-      }
-    );
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
+    fetchData();
   }, []);
 
-  const login = async () => {
-    try {
-      // Dynamische Redirect-URL erstellen, damit der User nach Login auf der aktuellen Seite bleibt
-      const origin = window.location.origin;
-      const currentPath = window.location.pathname + window.location.search;
-      const redirectUrl = `${origin}/auth/callback?next=${encodeURIComponent(currentPath)}`;
+  const currentTeam = useMemo(() => allTeams.find(t => t.id === selectedTeamId), [allTeams, selectedTeamId]);
 
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "discord",
-        options: {
-          redirectTo: redirectUrl,
-        },
-      });
+  useEffect(() => {
+    if (currentTeam) setTwitchUrl(currentTeam.twitch_url || "");
+  }, [currentTeam]);
+
+  useEffect(() => {
+    const fetchMembers = async () => {
+      if (!selectedTeamId || !currentTeam || activeTab !== "members") return;
+      setLoadingMembers(true);
+      
+      try {
+        const { data, error } = await supabase
+          .from('team_members')
+          .select('id, user_id, role, profiles(id, ea_ingame_name)')
+          .eq('team_id', selectedTeamId);
+
+        if (error) {
+          console.error("Fehler beim Laden der Mitglieder", error.message);
+          setMembers([]);
+        } else {
+          const roleOrder: Record<string, number> = { 'captain': 1, 'co-captain': 2, 'spieler': 3 };
+          const sortedMembers = (data || []).sort((a, b) => (roleOrder[a.role] || 4) - (roleOrder[b.role] || 4));
+          setMembers(sortedMembers);
+        }
+      } catch (err) {
+        console.error("Fehler beim Laden der Mitglieder", err);
+      } finally {
+        setLoadingMembers(false);
+      }
+    };
+
+    fetchMembers();
+  }, [activeTab, selectedTeamId, currentTeam]);
+
+  const showMessage = useCallback((msg: string) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(null), 3000);
+  }, []);
+
+  const handleOpenInviteModal = async () => {
+    if (!currentTeam) return;
+    
+    let token = currentTeam.invite_token;
+
+    if (!token) {
+      const newToken = generateSecureToken(16);
+      const { error } = await supabase
+        .from("teams")
+        .update({ invite_token: newToken })
+        .eq("id", currentTeam.id);
+
+      if (!error) {
+        token = newToken;
+        setAllTeams(prev => prev.map(t => t.id === currentTeam.id ? { ...t, invite_token: newToken } : t));
+      } else {
+        showMessage("❌ Fehler beim Generieren des Einladungscodes.");
+        return;
+      }
+    }
+
+    setInviteUrlState(`${window.location.origin}/invite/${token}`);
+    setShowAddMemberModal(true);
+  };
+
+  const handleCopyInviteLink = () => {
+    if (!inviteUrlState) return;
+    navigator.clipboard.writeText(inviteUrlState);
+    showMessage("✅ Kryptischer Einladungslink kopiert!");
+  };
+
+  const handleSelectTeam = useCallback((team: any, setCreating = false) => {
+    setIsCreating(setCreating);
+    setActiveTab("overview");
+    setPendingCosmetics({}); 
+    if (setCreating) {
+      setSelectedTeamId(null);
+      setTeamname("");
+      setCaptain("");
+      setLogoUrl("");
+      setTwitchUrl("");
+    } else {
+      setSelectedTeamId(team.id);
+      setTeamname(team.teamname || "");
+      setCaptain(team.captain || "");
+      setLogoUrl(team.logo_url || "");
+      setTwitchUrl(team.twitch_url || "");
+    }
+  }, [setActiveTab]);
+
+  const handleSelectCosmetic = useCallback((category: "banner" | "color" | "border" | "background", itemValue: string) => {
+    if (!selectedTeamId || isCreating || !currentTeam) return;
+
+    const currentlyEquipped = currentTeam[`equipped_${category}`] || 'default';
+
+    setPendingCosmetics(prev => {
+      const currentlyDisplayed = prev[category] !== undefined ? prev[category] : currentlyEquipped;
+      const newPending = { ...prev };
+      
+      if (currentlyDisplayed === itemValue) {
+        if (currentlyEquipped === 'default') delete newPending[category];
+        else newPending[category] = 'default';
+      } else {
+        if (itemValue === currentlyEquipped) delete newPending[category];
+        else newPending[category] = itemValue;
+      }
+      return newPending;
+    });
+  }, [selectedTeamId, isCreating, currentTeam]);
+
+  const handleSaveCosmetics = async () => {
+    if (!selectedTeamId || Object.keys(pendingCosmetics).length === 0) return;
+    setSaving(true);
+    
+    try {
+      const updates: any = {};
+      if (pendingCosmetics.banner !== undefined) updates.equipped_banner = pendingCosmetics.banner;
+      if (pendingCosmetics.color !== undefined) updates.equipped_color = pendingCosmetics.color;
+      if (pendingCosmetics.border !== undefined) updates.equipped_border = pendingCosmetics.border;
+      if (pendingCosmetics.background !== undefined) updates.equipped_background = pendingCosmetics.background;
+
+      const { error } = await supabase.from('teams').update(updates).eq('id', selectedTeamId);
       if (error) throw error;
+
+      setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, ...updates } : t));
+      setPendingCosmetics({}); 
+      showMessage("✅ Aussehen erfolgreich gespeichert!");
     } catch (error) {
-      console.error("Login Error:", error);
+      showMessage("❌ Fehler beim Speichern");
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Wenn geladen wird oder User eingeloggt ist, rendern wir nichts (Navbar zeigt dann das AccountMenu)
-  if (loading || user) return null;
+  const openWaitlistModal = async () => {
+    if (!selectedTeamId) return;
+    setShowWaitlistModal(true);
+    setLoadingWaitlist(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from('tournament_registrations')
+        .select('id, tournament_id, status, tournaments(id, name, max_teams)')
+        .eq('team_id', selectedTeamId)
+        .in('status', ['waiting', 'waitlist', 'Waitlist', 'warteliste', 'Warteliste', 'pending']); 
+        
+      if (error) throw error;
+
+      const formattedData = (data || []).map((reg: any) => ({
+        ...reg,
+        tournaments: Array.isArray(reg.tournaments) ? reg.tournaments[0] : reg.tournaments
+      }));
+
+      setWaitlistData(formattedData);
+    } catch (err) {
+      showMessage("❌ Fehler beim Laden der Wartelisten.");
+    } finally {
+      setLoadingWaitlist(false);
+    }
+  };
+
+  const confirmWaitlistSkip = async (regId: number, tournamentId: number, maxTeams: number | null) => {
+    if (!selectedTeamId || !currentTeam) return;
+    setSaving(true);
+    
+    try {
+      const { count, error: countError } = await supabase
+        .from('tournament_registrations')
+        .select('*', { count: 'exact', head: true })
+        .eq('tournament_id', tournamentId)
+        .eq('status', 'approved');
+
+      if (countError) throw countError;
+
+      const isFull = maxTeams ? (count || 0) >= maxTeams : false;
+
+      if (!isFull) {
+        const { error } = await supabase.from('tournament_registrations').update({ status: 'approved' }).eq('id', regId);
+        if (error) throw error;
+        showMessage("🎉 Ticket eingelöst! Ihr seid jetzt FEST im Turnier!");
+      } else {
+        const { error } = await supabase.from('tournament_registrations').update({ created_at: '2000-01-01T00:00:00Z' }).eq('id', regId);
+        if (error) throw error;
+        showMessage("🔥 Ticket eingelöst! Ihr seid jetzt auf Platz 1 der Warteliste!");
+      }
+
+      const newTicketAmount = currentTeam.waitlist_tickets - 1;
+      await supabase.from('teams').update({ waitlist_tickets: newTicketAmount }).eq('id', selectedTeamId);
+
+      setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, waitlist_tickets: newTicketAmount } : t));
+      setShowWaitlistModal(false);
+    } catch (error) {
+      showMessage("❌ Fehler beim Einlösen des Tickets.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRedeemTicket = async (ticketColumn: string, rewardName: string) => {
+    if (!selectedTeamId || !currentTeam) return;
+    
+    if ((currentTeam[ticketColumn] || 0) <= 0) {
+      showMessage(`❌ Du hast keine Tickets mehr für: ${rewardName}`);
+      return;
+    }
+
+    if (ticketColumn === 'waitlist_tickets') {
+      openWaitlistModal();
+      return;
+    }
+
+    if (ticketColumn === 'double_xp_matches') {
+      setSaving(true);
+      try {
+        const newTicketAmount = currentTeam.double_xp_matches - 1;
+        const newActiveBoosts = (currentTeam.active_xp_boosts || 0) + 8; 
+        
+        const { error } = await supabase
+          .from('teams')
+          .update({ double_xp_matches: newTicketAmount, active_xp_boosts: newActiveBoosts })
+          .eq('id', selectedTeamId);
+
+        if (error) throw error;
+        
+        setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, double_xp_matches: newTicketAmount, active_xp_boosts: newActiveBoosts } : t));
+        showMessage("✅ XP-BOOST AKTIVIERT! Eure nächsten 8 Siege bringen Doppelte-XP!");
+      } catch (err) {
+        showMessage("❌ Fehler beim Einlösen.");
+      } finally {
+        setSaving(false); 
+      }
+      return;
+    }
+
+    if (ticketColumn === 'random_tickets') {
+      setSaving(true);
+      try {
+        const newRandomTickets = currentTeam.random_tickets - 1;
+        const roll = Math.random();
+        let updates: any = { random_tickets: newRandomTickets };
+        let rewardMessage = "";
+
+        if (roll < 0.60) {
+          updates.active_xp_boosts = (currentTeam.active_xp_boosts || 0) + 8;
+          rewardMessage = "🎉 Glückwunsch! Du hast einen 8-Spiele XP-Boost gezogen!";
+        } else if (roll < 0.85) {
+          updates.feature_tickets = (currentTeam.feature_tickets || 0) + 1;
+          rewardMessage = "🎉 Glückwunsch! Du hast ein Feature Match Ticket gezogen!";
+        } else if (roll < 0.95) {
+          updates.waitlist_tickets = (currentTeam.waitlist_tickets || 0) + 1;
+          rewardMessage = "🎉 Glückwunsch! Du hast ein Warteliste-Skip Ticket gezogen!";
+        } else {
+          updates.active_xp_boosts = (currentTeam.active_xp_boosts || 0) + 8;
+          updates.feature_tickets = (currentTeam.feature_tickets || 0) + 1;
+          updates.waitlist_tickets = (currentTeam.waitlist_tickets || 0) + 1;
+          rewardMessage = "🎰 JACKPOT! 8-Spiele XP-Boost + Feature Match + Warteliste-Skip!";
+        }
+
+        const { error } = await supabase.from('teams').update(updates).eq('id', selectedTeamId);
+        if (error) throw error;
+        
+        setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, ...updates } : t));
+        showMessage(rewardMessage);
+      } catch (error) {
+        showMessage("❌ Fehler beim Öffnen der Lootbox.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const newTicketAmount = currentTeam[ticketColumn] - 1;
+      const { error: updateError } = await supabase.from('teams').update({ [ticketColumn]: newTicketAmount }).eq('id', selectedTeamId);
+      if (updateError) throw updateError;
+
+      await supabase.from('orga_alerts').insert([{
+        team_id: selectedTeamId,
+        teamname: currentTeam.teamname,
+        level: currentTeam.level,
+        reward_name: `TICKET EINGELÖST: ${rewardName}`
+      }]);
+
+      setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, [ticketColumn]: newTicketAmount } : t));
+      showMessage(`✅ Ticket erfolgreich eingelöst! Die Orga wurde benachrichtigt.`);
+    } catch (error) {
+      showMessage("❌ Fehler beim Einlösen des Tickets.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      if (file.size > 15 * 1024 * 1024) {
+        showMessage("❌ Das Bild ist gigantisch (über 15MB). Bitte wähle ein etwas kleineres.");
+        return;
+      }
+
+      setUploadingLogo(true);
+      const optimizedFile = await resizeImage(file, 400, 400);
+      const fileName = `team-${Date.now()}.webp`; 
+      const filePath = `${user.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage.from('team-logos').upload(filePath, optimizedFile);
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('team-logos').getPublicUrl(filePath);
+      const newLogoUrl = data.publicUrl;
+      setLogoUrl(newLogoUrl);
+
+      if (!isCreating && selectedTeamId) {
+        await supabase.from('teams').update({ logo_url: newLogoUrl }).eq('id', selectedTeamId);
+        setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, logo_url: newLogoUrl } : t));
+        showMessage("✅ Team Logo aktualisiert!");
+      } else {
+        showMessage("✅ Logo hochgeladen! Speichere das Team, um es abzuschließen.");
+      }
+    } catch (error: any) {
+      showMessage("❌ Fehler beim Hochladen des Logos");
+    } finally{
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleSaveTwitch = async () => {
+    if (!selectedTeamId) return;
+
+    const trimmedUrl = twitchUrl.trim();
+    
+    // Validiere, ob es leer ist (Erlaubt das Löschen des Links) oder ein gültiger Twitch-Link ist
+    if (trimmedUrl !== "") {
+      const twitchRegex = /^(https?:\/\/)?(www\.)?twitch\.tv\/[a-zA-Z0-9_]+(\/)?$/i;
+      if (!twitchRegex.test(trimmedUrl)) {
+        showMessage("❌ Bitte gib einen gültigen Link ein (z.B. https://twitch.tv/kanalname)");
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('teams').update({ twitch_url: trimmedUrl }).eq('id', selectedTeamId);
+      if (error) throw error;
+      setAllTeams(prev => prev.map(t => t.id === selectedTeamId ? { ...t, twitch_url: trimmedUrl } : t));
+      showMessage("✅ Twitch-Link erfolgreich gespeichert!");
+    } catch {
+      showMessage("❌ Fehler beim Speichern des Twitch-Links.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveTeam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isCreating) return;
+    if (!teamname.trim()) return showMessage("❌ Teamname darf nicht leer sein");
+    if (!captain.trim()) return showMessage("❌ Captain darf nicht leer sein");
+
+    setSaving(true);
+    try {
+      const isFirstTeam = allTeams.length === 0;
+      const initialToken = generateSecureToken(16);
+      
+      const { data: newTeam, error } = await supabase
+        .from("teams")
+        .insert([{ teamname, captain, user_id: user.id, is_active: isFirstTeam, logo_url: logoUrl, invite_token: initialToken }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      const { error: memberError } = await supabase
+        .from("team_members")
+        .insert([{ team_id: newTeam.id, user_id: user.id, role: 'captain' }]);
+
+      if (memberError) throw memberError;
+      
+      const newTeamWithRole = { ...newTeam, myRole: 'captain', team_rewards: [] };
+      setAllTeams(prev => [...prev, newTeamWithRole]);
+      handleSelectTeam(newTeamWithRole, false);
+      showMessage("✅ Team erfolgreich erstellt!");
+    } catch (err: any) {
+      if (err.code === '23505') {
+        showMessage("❌ Teamname schon in Benutzung");
+      } else {
+        console.error("Speicherfehler:", err);
+        showMessage("❌ Fehler beim Speichern");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmDeleteTeam = async () => {
+    if (!selectedTeamId) return;
+    setSaving(true);
+    try {
+      await supabase.from("teams").update({ is_deleted: true, is_active: false }).eq("id", selectedTeamId);
+
+      const remainingTeams = allTeams.filter(t => t.id !== selectedTeamId);
+      setAllTeams(remainingTeams);
+      
+      if (remainingTeams.length > 0) handleSelectTeam(remainingTeams[0], false);
+      else handleSelectTeam(null, true);
+
+      setShowDeleteModal(false);
+      showMessage("🗑️ Team entfernt.");
+    } catch (err) {
+      showMessage("❌ Fehler beim Löschen");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMakeActive = async () => {
+    if (!selectedTeamId) return;
+    setSaving(true);
+    try {
+      await supabase.from("teams").update({ is_active: false }).eq("user_id", user.id).eq("is_deleted", false);
+      await supabase.from("teams").update({ is_active: true }).eq("id", selectedTeamId);
+
+      setAllTeams(prev => prev.map(t => ({ ...t, is_active: t.id === selectedTeamId })));
+      showMessage("✅ Team als aktiv gesetzt!");
+    } catch (err) {
+      showMessage("❌ Fehler beim Aktivieren");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRoleChange = async (memberId: string, newRole: string) => {
+    try {
+      const { error } = await supabase.from('team_members').update({ role: newRole }).eq('id', memberId);
+      if (error) throw error;
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+      showMessage("✅ Rolle aktualisiert.");
+    } catch (error) {
+      showMessage("❌ Fehler beim Ändern der Rolle.");
+    }
+  };
+
+  const handleKickMember = async (memberId: string, memberName: string) => {
+    if (!confirm(`Möchtest du ${memberName} wirklich aus dem Team werfen?`)) return;
+    try {
+      const { error } = await supabase.from('team_members').delete().eq('id', memberId);
+      if (error) throw error;
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+      showMessage(`🚪 ${memberName} wurde aus dem Team entfernt.`);
+    } catch (error) {
+      showMessage("❌ Fehler beim Entfernen.");
+    }
+  };
+
+  const { teamStats, tierStyles, previewSettings } = useMemo(() => {
+    const stats = getTeamStatsUI(currentTeam);
+    const styles = getTierStyles(stats.level);
+    
+    const getCosmeticValue = (category: "banner" | "color" | "border" | "background") => {
+      if (pendingCosmetics[category] !== undefined) return pendingCosmetics[category];
+      if (currentTeam) return currentTeam[`equipped_${category}`] || 'default';
+      return 'default';
+    };
+
+    const borderVal = getCosmeticValue('border');
+    const bannerVal = getCosmeticValue('banner');
+    const colorVal = getCosmeticValue('color');
+
+    return {
+      teamStats: stats,
+      tierStyles: styles,
+      previewSettings: {
+        border: COSMETIC_BORDERS[borderVal]?.border || styles.border,
+        colorClass: COSMETIC_COLORS[colorVal]?.text || styles.text,
+        banner: bannerVal,
+        bg: styles.bg,
+        getValue: getCosmeticValue
+      }
+    };
+  }, [currentTeam, pendingCosmetics]);
+
+  const hasUnsavedChanges = Object.keys(pendingCosmetics).length > 0;
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-white"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (!user) return <div className="min-h-screen flex flex-col items-center justify-center text-white"><h2 className="text-2xl font-bold mb-2">Nicht eingeloggt</h2><p className="text-gray-400">Bitte logge dich über Discord ein.</p></div>;
+
+  const hasTeamVMRole = profile?.role === 'teamvm';
+  const ownedTeams = allTeams.filter(t => t.myRole === 'captain');
+  const joinedTeams = allTeams.filter(t => t.myRole !== 'captain');
 
   return (
-    <button
-      onClick={login}
-      className="bg-[#5865F2] hover:bg-[#4752C4] text-white px-5 py-2.5 rounded-full text-sm font-black uppercase tracking-widest transition-all duration-300 shadow-[0_0_15px_rgba(88,101,242,0.3)] hover:shadow-[0_0_25px_rgba(88,101,242,0.5)] hover:-translate-y-0.5"
+    <>
+      <div className="px-4 sm:px-6 pt-6 pb-16 w-full max-w-6xl mx-auto text-white flex flex-col relative overflow-hidden">
+        
+        <div className="absolute top-[20%] left-[20%] w-[500px] h-[500px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
+        <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-fuchsia-500/5 rounded-full blur-[150px] pointer-events-none z-0"></div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start relative z-10">
+          
+          {/* --- LINKE SPALTE: LOGO & VORSCHAU --- */}
+          <div className="flex flex-col gap-4 lg:col-span-1">
+            
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-lg mt-1">
+              Meine <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600">Teams</span>
+            </h1>
+
+            <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex flex-col items-center relative overflow-hidden transform-gpu">
+              <label className="relative cursor-pointer mb-3 block mt-1">
+                <div className="relative z-10 w-24 h-24 rounded-full border-4 border-[#1a1a1a] shadow-[0_0_15px_rgba(250,204,21,0.3)] bg-black/50 overflow-hidden flex items-center justify-center transition-transform duration-300">
+                  {logoUrl ? (
+                    <Image 
+                      src={logoUrl} 
+                      alt="Team Logo" 
+                      width={96}
+                      height={96}
+                      className="w-full h-full object-cover" 
+                      priority 
+                    />
+                  ) : (
+                    <span className="text-3xl text-gray-500">🛡️</span>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/80">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                  </div>
+                </div>
+                <div className="absolute inset-0 rounded-full border-2 border-yellow-500/50 scale-[1.05] pointer-events-none transition-transform duration-300 z-0"></div>
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo || currentTeam?.myRole === 'spieler'} />
+              </label>
+              
+              <div className="text-center w-full relative z-10">
+                <h4 className="text-white font-bold text-sm mb-1 flex items-center justify-center gap-2">
+                  Team Logo {uploadingLogo && <div className="w-3 h-3 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>}
+                </h4>
+                <p className="text-[10px] text-gray-400 leading-relaxed max-w-[180px] mx-auto">
+                  {currentTeam?.myRole === 'spieler' ? "Nur Captains können das Logo ändern." : "Klicke, um ein Logo hochzuladen."}
+                </p>
+              </div>
+            </div>
+
+            {!isCreating && currentTeam && (
+              <div className="hidden lg:flex bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex-col relative overflow-hidden transform-gpu">
+                <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
+                
+                <div className="w-full">
+                  <TeamCard 
+                    team={{
+                      level: teamStats.level,
+                      teamname: teamname || "Teamname",
+                      logo_url: logoUrl,
+                      equipped_banner: previewSettings.getValue('banner'),
+                      equipped_color: previewSettings.getValue('color'),
+                      equipped_border: previewSettings.getValue('border'),
+                      equipped_background: previewSettings.getValue('background'),
+                      team_rewards: currentTeam?.team_rewards || []
+                    }} 
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* --- RECHTE SPALTE: TEAM VERWALTUNG TABS --- */}
+          <div className="lg:col-span-2 flex flex-col gap-4">
+            <div className="bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex flex-col h-fit transform-gpu">
+              
+              {/* TEAM AUSWAHL CONTAINER */}
+              <div className="mb-6 flex justify-center w-full">
+                <div className="bg-black/30 backdrop-blur-md p-2 rounded-3xl border border-white/5 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-2 sm:gap-4 shadow-inner max-w-full">
+                  
+                  {/* Block 1: Eigene Teams */}
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {ownedTeams.length > 0 && (
+                      <span className="text-[9px] uppercase tracking-widest text-yellow-500/70 font-black bg-yellow-500/10 border border-yellow-500/20 px-2 py-1 rounded-lg hidden sm:block">
+                        Eigene
+                      </span>
+                    )}
+                    
+                    {ownedTeams.map((team) => (
+                      <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.1)] border border-white/10" : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"}`}>
+                        {team.logo_url ? (
+                          <Image src={team.logo_url} alt="Logo" width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white/20" />
+                        ) : (
+                          <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
+                        )}
+                        {team.teamname}
+                        {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
+                      </button>
+                    ))}
+                    
+                    {hasTeamVMRole && (
+                      <button onClick={() => handleSelectTeam(null, true)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ${isCreating ? "bg-yellow-500/10 text-yellow-500 border border-yellow-500/20" : "bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/5"}`}>
+                        <span className="text-base leading-none">+</span> Neu
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Separator */}
+                  {ownedTeams.length > 0 && joinedTeams.length > 0 && (
+                    <>
+                      <div className="hidden sm:block w-px h-8 bg-white/10 rounded-full"></div>
+                      <div className="sm:hidden w-1/2 h-px bg-white/10 rounded-full my-1"></div>
+                    </>
+                  )}
+
+                  {/* Block 2: Beigetretene Teams */}
+                  {joinedTeams.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <span className="text-[9px] uppercase tracking-widest text-gray-400 font-black bg-white/5 border border-white/10 px-2 py-1 rounded-lg hidden sm:block">
+                        Beigetreten
+                      </span>
+                      
+                      {joinedTeams.map((team) => (
+                        <button key={team.id} onClick={() => handleSelectTeam(team, false)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-300 flex items-center gap-2 ${selectedTeamId === team.id && !isCreating ? "bg-white/10 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.1)] border border-white/10" : "text-gray-400 hover:text-white hover:bg-white/5 border border-transparent"}`}>
+                          {team.logo_url ? (
+                            <Image src={team.logo_url} alt="Logo" width={20} height={20} className="w-5 h-5 rounded-full object-cover border border-white/20" />
+                          ) : (
+                            <span className="w-5 h-5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-[10px]">🛡️</span>
+                          )}
+                          {team.teamname}
+                          <span className={`ml-1 text-[9px] uppercase px-1.5 py-0.5 rounded font-black ${team.myRole === 'co-captain' ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-gray-400'}`}>
+                            {team.myRole === 'co-captain' ? 'Co-Capt' : 'Spieler'}
+                          </span>
+                          {team.is_active && <span className="w-1.5 h-1.5 rounded-full bg-green-500 drop-shadow-[0_0_5px_rgba(34,197,94,0.8)] animate-pulse"></span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {!isCreating && currentTeam && (
+                <div className="flex justify-center gap-4 sm:gap-6 border-b border-white/10 mb-5 px-2">
+                  <button onClick={() => setActiveTab("overview")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "overview" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                    Übersicht
+                  </button>
+                  
+                  {currentTeam.myRole !== 'spieler' && (
+                    <>
+                      <button onClick={() => setActiveTab("inventory")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "inventory" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                        Inventar & Stil
+                      </button>
+                      <button onClick={() => setActiveTab("members")} className={`pb-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest transition-colors border-b-2 ${activeTab === "members" ? "border-yellow-500 text-yellow-500" : "border-transparent text-gray-500 hover:text-white"}`}>
+                        Teammitglieder
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* === INHALT: ÜBERSICHT === */}
+              {!isCreating && currentTeam && activeTab === "overview" && (
+                <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-5">
+                  <div className="bg-gradient-to-b from-white/[0.04] to-transparent border border-white/5 rounded-3xl p-6 relative transform-gpu">
+                    {currentTeam.has_season_badge && (
+                      <div className="absolute top-4 left-4 z-10" title="Exklusives Season-Badge freigeschaltet!">
+                        <span className="text-2xl drop-shadow-[0_0_10px_rgba(250,204,21,0.8)] animate-pulse">🏆</span>
+                      </div>
+                    )}
+
+                    <div className="absolute top-4 right-4 z-10">
+                      {currentTeam.is_active ? (
+                        <span className="bg-green-500/10 text-green-400 border border-green-500/30 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 backdrop-blur-md">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span> Aktiv
+                        </span>
+                      ) : (
+                        currentTeam.myRole === 'captain' && (
+                          <button onClick={handleMakeActive} disabled={saving} className="bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors">Als Aktiv setzen</button>
+                        )
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-6 mb-4 mt-2">
+                      <div className="relative shrink-0 flex items-center justify-center w-24 h-24 md:w-32 md:h-32">
+                        <div className="absolute inset-0 bg-yellow-500/20 blur-xl rounded-full"></div>
+                        <Image 
+                          src={teamStats.tierImage} 
+                          alt={`Rank Level ${teamStats.level}`} 
+                          width={128}
+                          height={128}
+                          className="w-full h-full object-contain relative z-10" 
+                          priority 
+                        />
+                      </div>
+
+                      <div className="flex-1 w-full">
+                        <div className="flex justify-between items-end mb-3">
+                          <div>
+                            <h4 className="text-gray-500 text-[11px] uppercase tracking-widest font-bold mb-1">Team Level</h4>
+                            <div className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-300 to-yellow-600 drop-shadow-sm">{teamStats.level}</div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xl md:text-2xl font-bold text-white">{teamStats.currentLevelXp}</span>
+                            <span className="text-gray-500 text-xs font-medium ml-1">/ {teamStats.requiredLevelXp} XP</span>
+                            <div className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Gesamt: <span className="text-gray-400">{teamStats.totalXp}</span></div>
+                          </div>
+                        </div>
+                        <div className="w-full bg-black/60 rounded-full h-3 overflow-hidden border border-white/5 shadow-inner">
+                          <div className="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-300 h-full rounded-full transition-all duration-1000 ease-out relative" style={{ width: `${teamStats.progress}%` }}>
+                            <div className="absolute inset-0 bg-white/20 w-full h-full animate-pulse"></div>
+                          </div>
+                        </div>
+
+                        {(currentTeam.active_xp_boosts || 0) > 0 && (
+                          <div className="mt-4 flex items-center justify-center gap-2">
+                            <div className="bg-purple-500/20 border border-purple-500/40 px-4 py-1.5 rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)]">
+                              <span className="text-[11px] font-black uppercase tracking-widest text-purple-300">
+                                XP Boost active für <span className="text-white text-sm mx-1">{currentTeam.active_xp_boosts}</span> Spiele
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const matchesWon = currentTeam.total_match_wins || 0;
+                      const matchesLost = currentTeam.total_match_losses || 0;
+                      const totalMatches = matchesWon + matchesLost;
+                      const winrate = totalMatches > 0 ? Math.round((matchesWon / totalMatches) * 100) : 0;
+
+                      return (
+                        <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-center">
+                          <div className="w-[30%] sm:flex-1 bg-fuchsia-500/5 border border-fuchsia-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-fuchsia-500 to-transparent"></div>
+                            <span className="text-fuchsia-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(217,70,239,0.5)]">{currentTeam.participations || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-fuchsia-400/80 uppercase tracking-widest mt-1 font-semibold">Events</span>
+                          </div>
+                          
+                          <div className="w-[30%] sm:flex-1 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
+                            <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold">Siege</span>
+                          </div>
+                          
+                          <div className="w-[30%] sm:flex-1 bg-slate-400/5 border border-slate-400/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-slate-400 to-transparent"></div>
+                            <span className="text-slate-300 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(148,163,184,0.5)]">{currentTeam.wins_top3 || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-slate-400/80 uppercase tracking-widest mt-1 font-semibold">Top 4</span>
+                          </div>
+                          
+                          <div className="w-[30%] sm:flex-1 bg-orange-500/5 border border-orange-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-orange-500 to-transparent"></div>
+                            <span className="text-orange-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(249,115,22,0.5)]">{currentTeam.wins_top5 || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-orange-400/80 uppercase tracking-widest mt-1 font-semibold">Top 8</span>
+                          </div>
+                          
+                          <div className="w-[30%] sm:flex-1 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+                            <span className="text-emerald-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{currentTeam.total_goals_scored || 0}</span>
+                            <span className="text-[9px] md:text-[10px] text-emerald-400/80 uppercase tracking-widest mt-1 font-semibold">Tore</span>
+                          </div>
+
+                          <div className="w-[30%] sm:flex-1 bg-blue-500/5 border border-blue-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500 to-transparent"></div>
+                            <span className="text-blue-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]">{winrate}%</span>
+                            <span className="text-[9px] md:text-[10px] text-blue-400/80 uppercase tracking-widest mt-1 font-semibold">Winrate</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* 🔥 Twitch Sektion */}
+                  <div className="bg-black/20 border border-purple-500/20 rounded-2xl p-4 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                    <div className="flex-1 w-full space-y-1">
+                      <label className="text-[10px] uppercase tracking-widest text-gray-400 font-bold ml-1 flex items-center gap-1.5">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" className="text-purple-500">
+                          <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                        </svg>
+                        Twitch Stream
+                      </label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text" 
+                          value={twitchUrl} 
+                          onChange={(e) => setTwitchUrl(e.target.value)} 
+                          placeholder="https://twitch.tv/..." 
+                          disabled={currentTeam.myRole === 'spieler'}
+                          className="flex-1 bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-purple-500/50" 
+                        />
+                        {currentTeam.myRole !== 'spieler' && (
+                          <button onClick={handleSaveTwitch} disabled={saving} className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30 transition-colors shrink-0">
+                            Speichern
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {currentTeam.twitch_url && (
+                      <div className="shrink-0 flex items-center w-full sm:w-auto justify-end">
+                        <a href={currentTeam.twitch_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(147,51,234,0.4)] transition-colors w-full sm:w-auto justify-center">
+                          <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span> Zum Stream
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {currentTeam.team_rewards && currentTeam.team_rewards.some((r:any) => !r.custom_rewards?.type || r.custom_rewards?.type === 'badge') && (
+                    <div className="mt-2 border-t border-white/10 pt-5">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">
+                        Freigeschaltete Abzeichen & Erfolge
+                      </h4>
+                      <div className="flex flex-wrap gap-3">
+                        {currentTeam.team_rewards.filter((r:any) => !r.custom_rewards?.type || r.custom_rewards?.type === 'badge').map((tr: any) => {
+                          const reward = tr.custom_rewards;
+                          if (!reward) return null;
+
+                          return (
+                            <div 
+                              key={tr.id} 
+                              className="group relative flex items-center justify-center w-14 h-14 bg-white/5 border border-white/10 hover:border-yellow-500/50 rounded-xl transition-all hover:bg-white/10 cursor-help"
+                            >
+                              <Image 
+                                src={reward.image_url || "/rewards/default_badge.png"} 
+                                alt={reward.name}
+                                width={44}
+                                height={44}
+                                className="object-contain drop-shadow-lg group-hover:scale-110 transition-transform duration-300 w-11 h-11"
+                              />
+
+                              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50 w-48">
+                                <div className="bg-black/90 backdrop-blur-md border border-white/10 rounded-lg p-2 text-center shadow-xl">
+                                  <p className="text-yellow-400 font-bold text-xs">{reward.name}</p>
+                                  <p className="text-gray-300 text-[10px] mt-1 leading-tight">{reward.description}</p>
+                                  <p className="text-gray-600 text-[8px] mt-1.5 uppercase tracking-widest border-t border-white/10 pt-1">
+                                    Erreicht am: {new Date(tr.unlocked_at).toLocaleDateString('de-DE')}
+                                  </p>
+                                </div>
+                                <div className="w-2 h-2 bg-black/90 border-r border-b border-white/10 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2"></div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {currentTeam.myRole !== 'spieler' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <button onClick={() => setActiveTab("members")} className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
+                        Teammitglieder verwalten
+                      </button>
+                      <button onClick={() => showMessage("🛒 Transfermarkt öffnet sich bald!")} className="w-full bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
+                        Transfermarkt
+                      </button>
+                    </div>
+                  )}
+
+                  {currentTeam.myRole === 'captain' && (
+                    <div className="pt-2 border-t border-white/10">
+                      <form className="flex flex-col gap-4 mt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">Teamname</label>
+                            <input type="text" value={teamname} disabled className="w-full bg-black/40 border border-white/5 shadow-inner rounded-xl p-3 text-sm text-gray-400 cursor-not-allowed" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">Captain</label>
+                            <input type="text" value={captain} disabled className="w-full bg-black/40 border border-white/5 shadow-inner rounded-xl p-3 text-sm text-gray-400 cursor-not-allowed" />
+                          </div>
+                        </div>
+                        
+                        <button type="button" onClick={() => {setDeleteConfirmName(""); setShowDeleteModal(true);}} disabled={saving || uploadingLogo} className="w-full bg-black/20 hover:bg-red-500/10 text-red-500/80 hover:text-red-500 border border-red-500/10 hover:border-red-500/30 font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 flex justify-center items-center gap-2 text-sm">
+                          Team löschen
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* === INHALT: TEAMMITGLIEDER === */}
+              {!isCreating && currentTeam && activeTab === "members" && currentTeam.myRole !== 'spieler' && (
+                <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-4">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/[0.04] border border-white/5 rounded-2xl p-4 sm:p-5">
+                    <div>
+                      <h3 className="text-lg font-black text-white">Der Kader</h3>
+                      <p className="text-xs text-gray-400 mt-1">Verwalte hier deine Spieler und Co-Captains.</p>
+                    </div>
+                    {(currentTeam.myRole === 'captain' || currentTeam.myRole === 'co-captain') && (
+                      <button onClick={handleOpenInviteModal} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
+                        + Einladen
+                      </button>
+                    )}
+                  </div>
+
+                  {loadingMembers ? (
+                    <div className="py-10 flex justify-center"><div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                      {members.map((member) => (
+                        <div key={member.id} className="bg-black/40 border border-white/10 rounded-xl p-3 sm:p-4 flex flex-col relative overflow-hidden group">
+                          
+                          <div className="absolute top-0 right-0">
+                            {member.role === 'captain' && <span className="bg-yellow-500/20 text-yellow-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-yellow-500/30">Captain</span>}
+                            {member.role === 'co-captain' && <span className="bg-blue-500/20 text-blue-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-blue-500/30">Co-Captain</span>}
+                            {member.role === 'spieler' && <span className="bg-white/10 text-gray-300 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-bl-xl border-b border-l border-white/10">Spieler</span>}
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shrink-0 overflow-hidden">
+                              <span className="text-sm">👤</span>
+                            </div>
+                            <div className="flex flex-col overflow-hidden pr-12">
+                              {member.profiles?.ea_ingame_name ? (
+                                <span className="text-white font-bold text-sm truncate">
+                                  {member.profiles.ea_ingame_name}
+                                </span>
+                              ) : (
+                                <span className="text-red-400/80 font-bold text-[10px] uppercase tracking-widest truncate mt-0.5">
+                                  EA ID fehlt
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {currentTeam.myRole === 'captain' && member.role !== 'captain' && (
+                            <div className="mt-4 pt-3 border-t border-white/5 flex gap-2 transition-opacity duration-300 relative">
+                              
+                              <div className="relative flex-1">
+                                <select 
+                                  value={member.role} 
+                                  onChange={(e) => handleRoleChange(member.id, e.target.value)}
+                                  className="w-full bg-black/50 hover:bg-black/80 border border-white/10 text-white text-[10px] font-bold uppercase tracking-wider rounded-lg pl-3 pr-8 py-2.5 appearance-none focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 cursor-pointer transition-all"
+                                >
+                                  <option value="spieler">Spieler</option>
+                                  <option value="co-captain">Co-Captain</option>
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-gray-500">
+                                  ▼
+                                </div>
+                              </div>
+                              
+                              <button 
+                                onClick={() => handleKickMember(member.id, member.profiles?.ea_ingame_name || "Spieler")}
+                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-4 py-2 rounded-lg text-xs font-bold transition-colors shrink-0 flex items-center justify-center"
+                                title="Kicken"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      
+                      {members.length === 0 && (
+                        <div className="col-span-1 md:col-span-2 text-center text-gray-500 text-sm py-6">
+                          Keine Mitglieder gefunden.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* === INHALT: INVENTAR & AUSSEHEN === */}
+              {!isCreating && currentTeam && activeTab === "inventory" && currentTeam.myRole !== 'spieler' && (
+                <div className="animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-2">
+                  
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1 mt-1">Gutscheine & Tickets</h4>
+                  
+                  <div className="grid grid-cols-3 gap-3 mb-2">
+                    
+                    {/* WARTELISTE */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col relative h-[170px] transform-gpu">
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
+                        <span className="text-[11px] font-black text-white">{currentTeam.waitlist_tickets || 0}x</span>
+                      </div>
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/warteliste_skip.png" 
+                          alt="Warteliste" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
+                      </div>
+                      <button onClick={() => handleRedeemTicket('waitlist_tickets', 'Wartelisten-Priorität')} disabled={saving || (currentTeam.waitlist_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-white/10 hover:bg-white/20 text-white border border-white/10 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        Einlösen
+                      </button>
+                    </div>
+                    
+                    {/* FEATURE */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col relative h-[170px] transform-gpu">
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
+                        <span className="text-[11px] font-black text-white">{currentTeam.feature_tickets || 0}x</span>
+                      </div>
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/feature.png" 
+                          alt="Feature" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
+                      </div>
+                      <button onClick={() => handleRedeemTicket('feature_tickets', 'Feature Match')} disabled={saving || (currentTeam.feature_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        Einlösen
+                      </button>
+                    </div>
+                    
+                    {/* DOUBLE XP */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col relative h-[170px] transform-gpu">
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg flex flex-col items-center">
+                        <span className="text-[11px] font-black text-white">{currentTeam.double_xp_matches || 0}x</span>
+                        {(currentTeam.active_xp_boosts || 0) > 0 && <span className="text-[8px] text-purple-400 font-bold">({currentTeam.active_xp_boosts} Aktiv)</span>}
+                      </div>
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/doppelte_xp.png" 
+                          alt="Double XP" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
+                      </div>
+                      <button onClick={() => handleRedeemTicket('double_xp_matches', 'Double-XP Boost')} disabled={saving || (currentTeam.double_xp_matches || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        Einlösen
+                      </button>
+                    </div>
+
+                    {/* COTW */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col relative h-[170px] transform-gpu">
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
+                        <span className="text-[11px] font-black text-white">{currentTeam.cotw_tickets || 0}x</span>
+                      </div>
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/club_der_woche.png" 
+                          alt="Club der Woche" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
+                      </div>
+                      <button onClick={() => handleRedeemTicket('cotw_tickets', 'Club der Woche Feature')} disabled={saving || (currentTeam.cotw_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        Einlösen
+                      </button>
+                    </div>
+
+                    {/* RARE BACKGROUND TOKENS */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col relative h-[170px] transform-gpu">
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
+                        <span className="text-[11px] font-black text-white">{currentTeam.rare_background_tokens || 0}x</span>
+                      </div>
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/rare_background.png" 
+                          alt="Rare Background" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
+                      </div>
+                      <button onClick={() => handleRedeemTicket('rare_background_tokens', 'Seltenen Hintergrund freischalten')} disabled={saving || (currentTeam.rare_background_tokens || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        Einlösen
+                      </button>
+                    </div>
+
+                    {/* RANDOM */}
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col relative h-[170px] transform-gpu">
+                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md border border-white/10 rounded px-1.5 py-0.5 flex items-center z-10 shadow-lg">
+                        <span className="text-[11px] font-black text-white">{currentTeam.random_tickets || 0}x</span>
+                      </div>
+                      <div className="flex-1 flex items-center justify-center min-h-0 w-full mb-2 mt-1 relative">
+                        <Image 
+                          src="/rewards/mystery_reward.png" 
+                          alt="Zufalls Loot" 
+                          width={150}
+                          height={100}
+                          className="h-full max-h-[100px] w-auto object-contain drop-shadow-xl" 
+                        />
+                      </div>
+                      <button onClick={() => handleRedeemTicket('random_tickets', 'Zufällige Belohnung auswürfeln')} disabled={saving || (currentTeam.random_tickets || 0) <= 0} className="w-full mt-auto flex-shrink-0 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/20 font-bold py-1.5 rounded-lg text-[10px] uppercase transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                        Einlösen
+                      </button>
+                    </div>
+                  </div>
+
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 pl-1 mt-2">Aussehen</h4>
+                  
+                  <div className="flex gap-2 mb-2 overflow-x-auto pb-1 scrollbar-hide">
+                    <button onClick={() => setCosmeticTab("banner")} className={`px-4 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold whitespace-nowrap transition-colors ${cosmeticTab === "banner" ? "bg-white/10 text-white" : "bg-black/20 text-gray-500 hover:text-gray-300"}`}>Banner</button>
+                    <button onClick={() => setCosmeticTab("color")} className={`px-4 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold whitespace-nowrap transition-colors ${cosmeticTab === "color" ? "bg-white/10 text-white" : "bg-black/20 text-gray-500 hover:text-gray-300"}`}>Farben</button>
+                    <button onClick={() => setCosmeticTab("border")} className={`px-4 py-1.5 rounded-lg text-[10px] uppercase tracking-wider font-bold whitespace-nowrap transition-colors ${cosmeticTab === "border" ? "bg-white/10 text-white" : "bg-black/20 text-gray-500 hover:text-gray-300"}`}>Rahmen</button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+                    {currentTeam?.team_rewards?.filter((r:any) => r.custom_rewards?.type === cosmeticTab).map((tr:any) => {
+                      const reward = tr.custom_rewards;
+                      if (!reward) return null;
+
+                      const isBanner = cosmeticTab === "banner";
+                      const isColor = cosmeticTab === "color";
+                      const isBorder = cosmeticTab === "border";
+
+                      return (
+                        <button 
+                          key={tr.id}
+                          onClick={() => handleSelectCosmetic(cosmeticTab, reward.value)} 
+                          className={`relative border-2 rounded-xl overflow-hidden ${isBanner ? "aspect-[4.8/1]" : "h-20"} w-full flex items-center justify-center transition ${previewSettings.getValue(cosmeticTab) === reward.value ? 'border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'border-white/10 hover:border-white/30'}`}
+                        >
+                          {isBanner && reward.image_url && reward.image_url !== 'EMPTY' && (
+                            <Image 
+                              src={reward.image_url} 
+                              alt={reward.name} 
+                              fill
+                              sizes="(max-width: 768px) 50vw, 25vw"
+                              className="absolute inset-0 object-cover" 
+                            />
+                          )}
+
+                          {isColor && (
+                            reward.image_url && reward.image_url !== 'EMPTY' && reward.image_url !== 'NULL' ? (
+                              <Image src={reward.image_url} alt={reward.name} fill className="absolute inset-0 object-cover" />
+                            ) : (
+                              <div className={`absolute inset-0 w-full h-full ${COSMETIC_COLORS[reward.value]?.bg || 'bg-white/10'}`}></div>
+                            )
+                          )}
+
+                          {isBorder && (
+                            reward.image_url && reward.image_url !== 'EMPTY' && reward.image_url !== 'NULL' ? (
+                              <Image src={reward.image_url} alt={reward.name} fill className="absolute inset-0 object-cover" />
+                            ) : (
+                              <div className={`absolute inset-0 w-full h-full bg-white/5 border-[3px] ${COSMETIC_BORDERS[reward.value]?.preview || 'border-white/20'}`}></div>
+                            )
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {(!currentTeam?.team_rewards || currentTeam.team_rewards.filter((r:any) => r.custom_rewards?.type === cosmeticTab).length === 0) && (
+                      <div className="col-span-full py-8 text-center text-[10px] uppercase tracking-widest text-gray-500 bg-white/5 border border-white/5 rounded-xl">
+                        Noch keine Items freigeschaltet
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="lg:hidden mt-4 mb-4 w-full">
+                    <h4 className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3 pl-1 text-center">Vorschau: Team Karte</h4>
+                    <div className="w-full">
+                      <TeamCard 
+                        team={{
+                          level: teamStats.level,
+                          teamname: teamname || "Teamname",
+                          logo_url: logoUrl,
+                          equipped_banner: previewSettings.getValue('banner'),
+                          equipped_color: previewSettings.getValue('color'),
+                          equipped_border: previewSettings.getValue('border'),
+                          equipped_background: previewSettings.getValue('background'),
+                          team_rewards: currentTeam?.team_rewards || []
+                        }} 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 mt-auto border-t border-white/10">
+                    <button onClick={handleSaveCosmetics} disabled={saving || !hasUnsavedChanges} className={`w-full font-black uppercase tracking-widest py-3 text-sm rounded-xl transition-all flex justify-center items-center gap-2 ${hasUnsavedChanges ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-[0_0_15px_rgba(250,204,21,0.3)] hover:-translate-y-0.5' : 'bg-white/5 text-gray-500 cursor-not-allowed'}`}>
+                      {saving ? "WIRD GESPEICHERT..." : hasUnsavedChanges ? "AUSSEHEN SPEICHERN" : "KEINE ÄNDERUNGEN"}
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {/* === INHALT: NEUES TEAM ERSTELLEN === */}
+              {isCreating && (
+                hasTeamVMRole ? (
+                  <form onSubmit={handleSaveTeam} className="flex flex-col gap-6 mt-6 flex-1 animate-in fade-in zoom-in-95">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Teamname</label>
+                        <input type="text" value={teamname} onChange={(e) => setTeamname(e.target.value)} placeholder="Dein Teamname" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Captain (EA ID)</label>
+                        <input type="text" value={captain} onChange={(e) => setCaptain(e.target.value)} placeholder="EA ID eingeben" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
+                      </div>
+                    </div>
+                    
+                    <button type="submit" disabled={saving || uploadingLogo} className="w-full bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 text-black font-black uppercase tracking-widest py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(250,204,21,0.3)] hover:shadow-[0_0_30px_rgba(250,204,21,0.5)] hover:-translate-y-0.5 disabled:opacity-50 mt-auto">
+                      {saving ? "Wird gespeichert..." : "Team erstellen"}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-8 mt-6 bg-red-500/5 border border-red-500/10 rounded-3xl text-center animate-in fade-in zoom-in-95 h-full">
+                    <span className="text-4xl mb-4 drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]">🔒</span>
+                    <h3 className="text-xl font-black text-white mb-2">Fehlende Berechtigung</h3>
+                    <p className="text-gray-400 text-sm max-w-md leading-relaxed">
+                      Du benötigst die Rolle <strong className="text-red-400">TeamVM</strong>, um ein eigenes Team zu erstellen. 
+                      Bitte wende dich an den Support, falls du diese Rolle haben solltest.
+                    </p>
+                  </div>
+                )
+              )}
+
+            </div>
+          </div>
+        </div>
+
+        {/* 🔥 HIER IST DIE NEUE SNACKBAR */}
+        {message && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#111] text-white px-6 py-3 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-[150] animate-in fade-in slide-in-from-bottom-6 border border-white/10 backdrop-blur-md flex items-center gap-3 font-medium text-sm whitespace-nowrap">
+            {message}
+          </div>
+        )}
+      </div>
+
+      {/* --- ADD MEMBER MODAL --- */}
+      {showAddMemberModal && currentTeam && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
+          <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl animate-in zoom-in-95 transform-gpu flex flex-col">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <h3 className="text-xl md:text-2xl font-black text-white">Spieler einladen</h3>
+              <button onClick={() => setShowAddMemberModal(false)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition-colors">✕</button>
+            </div>
+            
+            <div className="flex-1">
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-6">
+                <h4 className="text-white font-bold mb-2 flex items-center gap-2">🔗 Einladungslink</h4>
+                <p className="text-xs text-gray-400 mb-5 leading-relaxed">
+                  Kopiere diesen Link und schicke ihn deinen Spielern z.B. über Discord. Sie können dem Team dann beitreten.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={inviteUrlState}
+                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-gray-400 truncate outline-none cursor-copy"
+                    onClick={handleCopyInviteLink}
+                  />
+                  <button onClick={handleCopyInviteLink} className="bg-yellow-500 hover:bg-yellow-400 text-black px-6 py-3 rounded-xl font-bold text-sm transition-colors shadow-[0_0_15px_rgba(250,204,21,0.2)]">
+                    Kopieren
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end shrink-0 pt-4 border-t border-white/10">
+              <button onClick={() => setShowAddMemberModal(false)} className="w-full bg-white/5 hover:bg-white/10 text-white font-bold py-3.5 rounded-xl transition-colors text-sm">Schließen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- DELETE MODAL --- */}
+      {showDeleteModal && currentTeam && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
+          <div className="bg-[#0a0a0a] border border-red-500/20 rounded-3xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(220,38,38,0.15)] animate-in zoom-in-95 transform-gpu">
+            <h3 className="text-2xl font-black text-white mb-3">Team wirklich löschen?</h3>
+            <p className="text-gray-400 mb-6 text-sm leading-relaxed">Bitte gib zur Bestätigung den exakten Namen <strong className="text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">{currentTeam.teamname}</strong> ein.</p>
+            <input type="text" value={deleteConfirmName} onChange={(e) => setDeleteConfirmName(e.target.value)} placeholder="Teamname bestätigen" className="w-full bg-black border border-white/10 focus:border-red-500/50 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 transition-colors mb-8 placeholder-gray-600" />
+            <div className="flex gap-4">
+              <button onClick={() => setShowDeleteModal(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3.5 rounded-xl transition-colors">Abbrechen</button>
+              <button onClick={confirmDeleteTeam} disabled={deleteConfirmName !== currentTeam.teamname || saving} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(220,38,38,0.4)] disabled:shadow-none">{saving ? "Wird gelöscht..." : "Endgültig löschen"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- WAITLIST MODAL --- */}
+      {showWaitlistModal && currentTeam && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md px-4">
+          <div className="bg-[#0a0a0a] border border-white/10 rounded-3xl p-6 md:p-8 w-full max-w-lg shadow-2xl animate-in zoom-in-95 transform-gpu">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl md:text-2xl font-black text-white">🎟️ Skip-Ticket einlösen</h3>
+              <button onClick={() => setShowWaitlistModal(false)} className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full w-8 h-8 flex items-center justify-center transition-colors">✕</button>
+            </div>
+            
+            <p className="text-gray-400 mb-6 text-sm leading-relaxed">
+              Für welches Turnier möchtest du das Ticket nutzen? 
+              Ist das Turnier voll, rutscht ihr auf <strong>Platz 1 der Warteliste</strong>. Ist noch Platz, seid ihr <strong>direkt dabei!</strong>
+            </p>
+
+            {loadingWaitlist ? (
+              <div className="py-10 flex justify-center"><div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" /></div>
+            ) : waitlistData.length === 0 ? (
+              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl text-center text-gray-400 mb-6 text-sm">
+                Dein Team befindet sich aktuell auf keiner Warteliste für ein Turnier.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3 mb-6 max-h-[40vh] overflow-y-auto pr-2">
+                {waitlistData.map((reg) => (
+                  <div key={reg.id} className="bg-[#1e1e1e] border border-white/5 p-4 rounded-2xl flex flex-col sm:flex-row gap-4 justify-between items-center">
+                    <div className="text-center sm:text-left">
+                      <h4 className="font-bold text-white text-lg">{reg.tournaments?.name}</h4>
+                      <div className="text-xs text-yellow-500 font-bold uppercase tracking-widest mt-1">Status: Warteliste</div>
+                    </div>
+                    <button onClick={() => confirmWaitlistSkip(reg.id, reg.tournament_id, reg.tournaments?.max_teams)} disabled={saving} className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-2.5 px-6 rounded-xl transition-colors shadow-[0_0_15px_rgba(250,204,21,0.3)] disabled:opacity-50 w-full sm:w-auto">
+                      {saving ? "Lädt..." : "Hier einlösen"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <div className="flex justify-end">
+              <button onClick={() => setShowWaitlistModal(false)} className="w-full sm:w-auto bg-white/5 hover:bg-white/10 text-white font-bold py-3 px-8 rounded-xl transition-colors">Abbrechen</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function MeineTeamsPage() {
+  return (
+    <Suspense 
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-white">
+          <div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
     >
-      Mit Discord Login
-    </button>
+      <MeineTeamsContent />
+    </Suspense>
   );
 }
