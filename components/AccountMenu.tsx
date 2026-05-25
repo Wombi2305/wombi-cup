@@ -51,7 +51,6 @@ export default function AccountMenu() {
 
   if (!user) return null;
 
-  // --- GEÄNDERT: Neue Rolle hinzugefügt ---
   const isAdmin = userRoles.includes("1492478735444873398");
   const isTl = userRoles.includes("1504431450177667092"); // Turnierleitung
   const isStreamer = userRoles.includes("1493976124173062195");
@@ -76,28 +75,26 @@ export default function AccountMenu() {
 
       {open && (
         <div className="md:absolute md:right-0 md:top-full mt-2 md:mt-4 w-full md:w-56 bg-black/95 backdrop-blur-xl border border-yellow-500/10 rounded-xl shadow-2xl overflow-hidden py-1 z-[100]">
-          <Link href="/profil" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
+          {/* --- GEÄNDERT: hidden md:block entfernt, Padding für Mobile angepasst --- */}
+          <Link href="/profil" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
             Profil
           </Link>
-          <Link href="/meine-teams" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
+          <Link href="/meine-teams" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-white/90 hover:text-yellow-400 hover:bg-white/5 transition">
             Meine Teams
           </Link>
 
-          {/* --- GEÄNDERT: isTl hinzugefügt --- */}
           {(isAdmin || isStreamer || isTl) && (
-            <div className="hidden md:block border-t border-white/5 my-1" />
+            <div className="border-t border-white/5 my-1" />
           )}
 
-          {/* --- GEÄNDERT: isTl hinzugefügt --- */}
           {(isAdmin || isStreamer || isTl) && (
-            <Link href="/draw" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-purple-400 hover:bg-purple-500/10">
+            <Link href="/draw" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-purple-400 hover:bg-purple-500/10">
               🎰 Auslosung
             </Link>
           )}
           
-          {/* --- GEÄNDERT: Admin Panel wird nun für Orga und TL angezeigt --- */}
           {(isAdmin || isTl) && (
-            <Link href="/admin" onClick={() => setOpen(false)} className="hidden md:block px-4 py-2 text-blue-400 hover:bg-blue-500/10">
+            <Link href="/admin" onClick={() => setOpen(false)} className="block text-center md:text-left px-4 py-3 md:py-2 text-blue-400 hover:bg-blue-500/10">
               👑 Admin Panel
             </Link>
           )}
