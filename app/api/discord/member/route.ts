@@ -41,7 +41,7 @@ export async function GET(req: Request) {
 
     if (roles.includes(ORGA)) {
       role = "orga";
-    }else if (roles.includes(TURNIERLEITUNG)) {
+    } else if (roles.includes(TURNIERLEITUNG)) {
       role = "turnierleitung";
     } else if (roles.includes(STREAMER)) {
       role = "streamer";
@@ -50,6 +50,9 @@ export async function GET(req: Request) {
     } else if (roles.includes(FREEAGENT)) {
       role = "freeagent";
     }
+
+    // 🔥 Discord Name extrahieren (Username bevorzugt, sonst Global Name)
+    const discordName = member.user?.username || member.user?.global_name || "Unbekannt";
 
     // 🔥 SERVER CLIENT
     const supabase = await createClient();
@@ -64,11 +67,13 @@ export async function GET(req: Request) {
         id: user.id,
         discord_id: userId,
         role: role, 
+        discord_name: discordName, // <-- NEU: Hier wird der Discord-Name gespeichert
       });
     }
 
     return NextResponse.json({
       nick: member.nick || member.user?.username,
+      discordName: discordName,
       roles,
       role,
     });
