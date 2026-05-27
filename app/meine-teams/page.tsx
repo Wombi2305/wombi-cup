@@ -611,7 +611,7 @@ function MeineTeamsContent() {
   const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isCreating) return;
-    if (!teamname.trim()) return showMessage("❌ Teamname darf nicht leer sein");
+    if (!teamname.trim()) return showMessage("❌ ProClubs Clubname darf nicht leer sein");
     if (!captain.trim()) return showMessage("❌ Captain darf nicht leer sein");
 
     setSaving(true);
@@ -639,7 +639,7 @@ function MeineTeamsContent() {
       showMessage("✅ Team erfolgreich erstellt!");
     } catch (err: any) {
       if (err.code === '23505') {
-        showMessage("❌ Teamname schon in Benutzung");
+        showMessage("❌ ProClubs Clubname schon in Benutzung");
       } else {
         console.error("Speicherfehler:", err);
         showMessage("❌ Fehler beim Speichern");
@@ -806,7 +806,7 @@ function MeineTeamsContent() {
                   <TeamCard 
                     team={{
                       level: teamStats.level,
-                      teamname: teamname || "Teamname",
+                      teamname: teamname || "ProClubs Clubname",
                       logo_url: logoUrl,
                       equipped_banner: previewSettings.getValue('banner'),
                       equipped_color: previewSettings.getValue('color'),
@@ -1109,7 +1109,7 @@ function MeineTeamsContent() {
                       <form className="flex flex-col gap-4 mt-2">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">Teamname</label>
+                            <label className="block text-[10px] uppercase tracking-widest text-gray-500 font-bold ml-1">ProClubs Clubname</label>
                             <input type="text" value={teamname} disabled className="w-full bg-black/40 border border-white/5 shadow-inner rounded-xl p-3 text-sm text-gray-400 cursor-not-allowed" />
                           </div>
                           <div className="space-y-1.5">
@@ -1410,7 +1410,7 @@ function MeineTeamsContent() {
                       <TeamCard 
                         team={{
                           level: teamStats.level,
-                          teamname: teamname || "Teamname",
+                          teamname: teamname || "ProClubs Clubname",
                           logo_url: logoUrl,
                           equipped_banner: previewSettings.getValue('banner'),
                           equipped_color: previewSettings.getValue('color'),
@@ -1437,8 +1437,8 @@ function MeineTeamsContent() {
                   <form onSubmit={handleSaveTeam} className="flex flex-col gap-6 mt-6 flex-1 animate-in fade-in zoom-in-95">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Teamname</label>
-                        <input type="text" value={teamname} onChange={(e) => setTeamname(e.target.value)} placeholder="Dein Teamname" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
+                        <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">ProClubs Clubname</label>
+                        <input type="text" value={teamname} onChange={(e) => setTeamname(e.target.value)} placeholder="Dein ProClubs Clubname" className="w-full bg-black/40 border border-white/10 shadow-inner rounded-xl p-4 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-yellow-500 hover:border-white/20 transition-colors" />
                       </div>
                       <div className="space-y-2">
                         <label className="block text-xs uppercase tracking-widest text-gray-400 font-bold ml-1">Captain (EA ID)</label>
@@ -1517,7 +1517,7 @@ function MeineTeamsContent() {
           <div className="bg-[#0a0a0a] border border-red-500/20 rounded-3xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(220,38,38,0.15)] animate-in zoom-in-95 transform-gpu">
             <h3 className="text-2xl font-black text-white mb-3">Team wirklich löschen?</h3>
             <p className="text-gray-400 mb-6 text-sm leading-relaxed">Bitte gib zur Bestätigung den exakten Namen <strong className="text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">{currentTeam.teamname}</strong> ein.</p>
-            <input type="text" value={deleteConfirmName} onChange={(e) => setDeleteConfirmName(e.target.value)} placeholder="Teamname bestätigen" className="w-full bg-black border border-white/10 focus:border-red-500/50 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 transition-colors mb-8 placeholder-gray-600" />
+            <input type="text" value={deleteConfirmName} onChange={(e) => setDeleteConfirmName(e.target.value)} placeholder="ProClubs Clubname bestätigen" className="w-full bg-black border border-white/10 focus:border-red-500/50 rounded-xl p-4 text-white focus:outline-none focus:ring-2 focus:ring-red-500/20 transition-colors mb-8 placeholder-gray-600" />
             <div className="flex gap-4">
               <button onClick={() => setShowDeleteModal(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-white font-bold py-3.5 rounded-xl transition-colors">Abbrechen</button>
               <button onClick={confirmDeleteTeam} disabled={deleteConfirmName !== currentTeam.teamname || saving} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(220,38,38,0.4)] disabled:shadow-none">{saving ? "Wird gelöscht..." : "Endgültig löschen"}</button>

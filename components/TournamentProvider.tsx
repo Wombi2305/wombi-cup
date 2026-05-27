@@ -19,7 +19,8 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
     const [tournamentsRes, matchesRes, assignmentsRes] = await Promise.all([
       supabase
         .from("tournaments")
-        .select(`*, tournament_registrations(*, teams(*))`)
+        // 🔥 HIER IST DER FIX: team_rewards und custom_rewards werden jetzt mitgeladen!
+        .select(`*, tournament_registrations(*, teams(*, team_rewards(*, custom_rewards(*))))`)
         .order("start_time", { ascending: true }),
       supabase
         .from("matches")
@@ -75,7 +76,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       groupAssignments, 
       loading, 
       refreshData: fetchAllData,
-      refreshTournaments: fetchAllData // 🔥 HIER IST DER FIX! Beide Namen sind jetzt verfügbar.
+      refreshTournaments: fetchAllData // 🔥 Beide Namen sind jetzt verfügbar.
     }}>
       {children}
     </TournamentContext.Provider>

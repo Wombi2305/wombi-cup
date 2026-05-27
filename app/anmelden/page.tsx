@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useTournaments } from "@/components/TournamentProvider";
+import TeamCard from "@/components/TeamCard"; // 🔥 HIER IMPORTIEREN (Pfad ggf. anpassen)
 
 export default function Anmelden() {
   const { tournaments, loading: tournamentsLoading, refreshTournaments } = useTournaments();
@@ -22,6 +23,7 @@ export default function Anmelden() {
   const [message, setMessage] = useState<string | null>(null);
 
   const [showRolePopup, setShowRolePopup] = useState(false);
+  const [selectedTournamentTeams, setSelectedTournamentTeams] = useState<any | null>(null);
   
   const [discordUser, setDiscordUser] = useState<any>(null);
   const [isCheckingDiscord, setIsCheckingDiscord] = useState<boolean>(true);
@@ -53,7 +55,7 @@ export default function Anmelden() {
 
         const { data: teams } = await supabase
           .from("teams")
-          .select("id, teamname, captain, is_active, user_id")
+          .select("id, teamname, captain, is_active, user_id, level, logo_url, equipped_border, equipped_color, equipped_banner, team_rewards(*)")
           .eq("user_id", currentUser.id)
           .eq("is_deleted", false);
         
@@ -308,11 +310,19 @@ export default function Anmelden() {
                       <span>{t.start_time ? new Date(t.start_time).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : "Kein Datum"}</span>
                     </div>
                     
-                    <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                      <span className="text-white font-bold">{approvedCount} <span className="text-gray-400 font-normal">/ {t.max_teams || "∞"} Teams angemeldet</span></span>
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        <span className="text-white font-bold">{approvedCount} <span className="text-gray-400 font-normal">/ {t.max_teams || "∞"} Teams</span></span>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedTournamentTeams(t)}
+                        className="text-[10px] uppercase font-bold tracking-widest text-yellow-500 hover:text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 px-2 py-1 rounded-lg transition-colors border border-yellow-500/20"
+                      >
+                        Angemeldete Teams
+                      </button>
                     </div>
                   </div>
 
@@ -477,7 +487,7 @@ export default function Anmelden() {
         )}
       </div>
 
-      {/* POPUP WURDE HIERHER VERSCHOBEN UND MIT ANIMATIONEN VERBESSERT */}
+      {/* POPUP ROLLEN CHECK */}
       {showRolePopup && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-[2rem] bg-[#0f0f14] border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] p-6 md:p-8 animate-in zoom-in-95 duration-300">
@@ -517,6 +527,72 @@ export default function Anmelden() {
               >
                 Zum Channel #✅┃Beitreten
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP FÜR ANGEMELDETE TEAMS MIT TEAMCARDS */}
+      {selectedTournamentTeams && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-[2rem] bg-[#0f0f14] border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-300">
+            
+            <div className="p-6 md:p-8 border-b border-white/10 flex-shrink-0 relative">
+              <button
+                onClick={() => setSelectedTournamentTeams(null)}
+                className="absolute top-6 right-6 w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition-all"
+              >
+                ✕
+              </button>
+              <h2 className="text-2xl font-black text-white pr-8">
+                Teams: <span className="text-yellow-500">{selectedTournamentTeams.name}</span>
+              </h2>
+            </div>
+
+            <div className="p-6 md:p-8 overflow-y-auto flex-grow custom-scrollbar">
+              {/* Angemeldete Teams */}
+              <div className="mb-8">
+                <h3 className="text-sm uppercase tracking-widest font-bold text-green-400 mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                  Zugelassene Teams ({selectedTournamentTeams.tournament_registrations?.filter((r: any) => r.status === "approved").length || 0})
+                </h3>
+                {selectedTournamentTeams.tournament_registrations?.filter((r: any) => r.status === "approved").length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {selectedTournamentTeams.tournament_registrations
+                      .filter((r: any) => r.status === "approved")
+                      .map((reg: any) => (
+                        <TeamCard 
+                          key={reg.id} 
+                          team={reg.teams} 
+                          isDu={reg.teams?.user_id === user?.id} 
+                        />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm italic">Noch keine Teams zugelassen.</p>
+                )}
+              </div>
+
+              {/* Warteliste */}
+              {selectedTournamentTeams.tournament_registrations?.filter((r: any) => r.status === "waiting").length > 0 && (
+                <div>
+                  <h3 className="text-sm uppercase tracking-widest font-bold text-yellow-500 mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                    Warteliste ({selectedTournamentTeams.tournament_registrations?.filter((r: any) => r.status === "waiting").length || 0})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 opacity-70 grayscale-[20%]">
+                    {selectedTournamentTeams.tournament_registrations
+                      .filter((r: any) => r.status === "waiting")
+                      .map((reg: any) => (
+                        <TeamCard 
+                          key={reg.id} 
+                          team={reg.teams} 
+                          isDu={reg.teams?.user_id === user?.id} 
+                        />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
