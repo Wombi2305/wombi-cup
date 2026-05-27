@@ -79,7 +79,7 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
         
         {/* 🔥 FLUID LOGO: Es ist jetzt immer exakt 12% der Kartenbreite groß! */}
         <div 
-          className={`relative shrink-0 flex items-center justify-center rounded-full bg-black/60 shadow-sm border border-white/20 overflow-hidden ${isWinner ? 'ring-1 ring-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.6)]' : ''}`}
+          className={`relative shrink-0 flex items-center justify-center rounded-full overflow-hidden drop-shadow-md ${isWinner ? 'ring-1 ring-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.6)]' : ''}`}
           style={{ width: "12cqi", height: "12cqi" }}
         >
           {team.logo_url ? (
