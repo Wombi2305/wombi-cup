@@ -33,7 +33,7 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
     return (
       <div 
         className={`flex md:hidden items-center border border-white/5 bg-white/5 rounded-xl px-[3cqi] font-bold flex-1 min-w-0 text-gray-500 italic shadow-sm mx-auto justify-center ${reverseOnMobile ? 'flex-row-reverse' : ''}`}
-        style={{ aspectRatio: "4.8 / 1", width: "100%", containerType: "inline-size", fontSize: "clamp(10px, 6cqi, 15px)" }}
+        style={{ aspectRatio: "4.8 / 1", width: "100%", containerType: "inline-size", fontSize: "7cqi" }}
       >
         <span className="truncate">TBD</span>
       </div>
@@ -57,7 +57,6 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
   }
 
   return (
-    // 🔥 HIER GEFIXT: 'containerType' macht die Karte zum Messwerkzeug für alles, was drinnen liegt!
     <div 
       className={`flex md:hidden items-center px-[3cqi] rounded-xl border font-bold flex-1 min-w-0 transition duration-500 relative overflow-hidden shadow-md ${border} ${bg} ${reverseOnMobile ? 'flex-row-reverse' : ''}`}
       style={{ aspectRatio: "4.8 / 1", width: "100%", containerType: "inline-size" }}
@@ -74,10 +73,10 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
         />
       )}
 
-      {/* Die Abstände wachsen und schrumpfen (gap-[3cqi]) ab jetzt auch automatisch mit! */}
+      {/* Die Abstände skalieren jetzt ebenfalls linear mit */}
       <div className={`relative z-10 flex items-center gap-[3cqi] min-w-0 max-w-full flex-row mx-auto ${reverseOnMobile ? 'flex-row-reverse' : ''}`}>
         
-        {/* 🔥 FLUID LOGO: Es ist jetzt etwas größer (16cqi statt 12cqi)! */}
+        {/* 🔥 FLUID LOGO: Immer 16% der Containerbreite */}
         <div 
           className={`relative shrink-0 flex items-center justify-center rounded-full overflow-hidden drop-shadow-md ${isWinner ? 'ring-1 ring-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.6)]' : ''}`}
           style={{ width: "16cqi", height: "16cqi" }}
@@ -101,16 +100,16 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
           )}
         </div>
         
-        {/* 🔥 FLUID TEXT: Die Schriftgröße liest die Kartenbreite und passt sich stufenlos etwas größer an! */}
+        {/* 🔥 FLUID TEXT: Ohne Clamp! Die Schriftgröße ist nun fix an die Breite der Karte gekoppelt (7cqi). */}
         <span 
           className={`truncate shrink leading-none tracking-tight transition-colors duration-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] ${textColor}`}
-          style={{ fontSize: "clamp(12px, 7cqi, 18px)" }}
+          style={{ fontSize: "7cqi" }}
         >
           {team.name || team.teamname}
           {isDu && (
             <span 
               className="ml-[1cqi] opacity-90 font-black uppercase tracking-wider text-yellow-500 shrink-0 relative top-[1px]"
-              style={{ fontSize: "clamp(8px, 4.5cqi, 12px)" }}
+              style={{ fontSize: "4.5cqi" }}
             >
               (Du)
             </span>
