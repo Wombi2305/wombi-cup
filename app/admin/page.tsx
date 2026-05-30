@@ -324,24 +324,38 @@ export default function Admin() {
           const t2 = teamsForRotation[teamsForRotation.length - 1 - i];
           
           if (t1.id && t2.id) {
-            const isT1Freilos = t1.teamname === "--- FREILOS ---";
-            const isT2Freilos = t2.teamname === "--- FREILOS ---";
+            // 🔥 NEU: Heimrecht-Logik für Fairness
+            let homeTeam = t1;
+            let awayTeam = t2;
+
+            if (i === 0) {
+              // Das feste Team auf Position 0 wechselt jede Runde sein Heimrecht
+              if (round % 2 !== 0) {
+                homeTeam = t2;
+                awayTeam = t1;
+              }
+            } 
+            // Bei i > 0 gleicht sich das Heimrecht automatisch durch das Rotieren aus
+
+            const isHomeFreilos = homeTeam.teamname === "--- FREILOS ---";
+            const isAwayFreilos = awayTeam.teamname === "--- FREILOS ---";
 
             inserts.push({
               tournament_id: tournamentId,
               group_name: group,
-              team1_id: t1.id,
-              team2_id: t2.id,
+              team1_id: homeTeam.id,
+              team2_id: awayTeam.id,
               match_type: "group",
               round: round + 1,
-              status: (isT1Freilos || isT2Freilos) ? "confirmed" : "pending",
-              score1: isT1Freilos ? 0 : (isT2Freilos ? 1 : null),
-              score2: isT1Freilos ? 1 : (isT2Freilos ? 0 : null),
+              status: (isHomeFreilos || isAwayFreilos) ? "confirmed" : "pending",
+              score1: isHomeFreilos ? 0 : (isAwayFreilos ? 1 : null),
+              score2: isHomeFreilos ? 1 : (isAwayFreilos ? 0 : null),
               reported_by: null,
               confirmed_by: null
             });
           }
         }
+        // Rotation für die nächste Runde: Letztes Element wandert an Position 1
         teamsForRotation.splice(1, 0, teamsForRotation.pop()!);
       }
     });

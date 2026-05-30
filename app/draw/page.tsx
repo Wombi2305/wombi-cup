@@ -227,9 +227,16 @@ export default function DrawPage() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedTournament]);
 
+  // 🔥 GEFIXT: Holt die Teams UND aktualisiert sofort die Gruppennamen
   useEffect(() => {
-    if (selectedTournament) fetchTeams();
-  }, [selectedTournament]);
+    if (selectedTournament) {
+      fetchTeams();
+      const selected = tournaments.find(t => t.id === selectedTournament);
+      if (selected) {
+        updateGroupNames(selected.group_count || 2);
+      }
+    }
+  }, [selectedTournament]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTeams = async () => {
     if (!selectedTournament) return;
@@ -275,14 +282,12 @@ export default function DrawPage() {
     if (!teams || teams.length === 0) return;
     const teamIds = teams.map(t => t.id);
 
-    // Aktuellen Stand laden
     const { data: currentTeams } = await supabase
       .from("teams")
       .select("id, participations")
       .in("id", teamIds);
 
     if (currentTeams) {
-      // Alle Teams in der Datenbank updaten (+1)
       const updatePromises = currentTeams.map(t => 
         supabase
           .from("teams")
@@ -293,6 +298,7 @@ export default function DrawPage() {
     }
   };
 
+  // 🔥 GEFIXT: Völlig zufällige Verteilung der Gruppen, ähnlich wie Live Draw
   const quickDraw = async () => {
     if (!selectedTournament) return alert("Turnier wählen");
     const selected = tournaments.find(t => t.id === selectedTournament);
@@ -301,20 +307,45 @@ export default function DrawPage() {
     setDrawStarted(true);
     setFinished(true);
 
+    const gCount = selected?.group_count || 2;
+    const maxSize = selected?.group_size || 4; 
+    const currentGroupNames = Array.from({ length: gCount }, (_, i) => String.fromCharCode(65 + i));
+
     await supabase.from("group_assignments").delete().eq("tournament_id", selectedTournament);
     const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
     const inserts: any[] = [];
-    const groupCount = groupNames.length;
+    
+    // Zähler für die Gruppen füllen
+    const groupCounts: Record<string, number> = {};
+    currentGroupNames.forEach(g => groupCounts[g] = 0);
 
-    shuffledTeams.forEach((team, index) => {
-      const group = groupNames[index % groupCount];
-      inserts.push({ tournament_id: selectedTournament, team_id: team.id, group_name: group });
+    shuffledTeams.forEach((team) => {
+      // Finde alle Gruppen, die noch NICHT voll sind
+      let availableGroups = currentGroupNames.filter(g => groupCounts[g] < maxSize);
+      
+      // Fallback: Falls mehr Teams da sind als Plätze existieren
+      if (availableGroups.length === 0) {
+        availableGroups = currentGroupNames;
+      }
+
+      // Wähle aus den verfügbaren Gruppen eine zufällige aus
+      const randomGroup = availableGroups[Math.floor(Math.random() * availableGroups.length)];
+      
+      // Zähler hochsetzen und eintragen
+      groupCounts[randomGroup]++;
+      inserts.push({ tournament_id: selectedTournament, team_id: team.id, group_name: randomGroup });
     });
 
-    await supabase.from("group_assignments").insert(inserts);
+    const { error } = await supabase.from("group_assignments").insert(inserts);
+    if (error) {
+      console.error("Supabase Insert Fehler:", error);
+      alert("Fehler beim Eintragen der Gruppen in die Datenbank!");
+      return;
+    }
+
     await supabase.from("tournaments").update({ draw_finished: true }).eq("id", selectedTournament);
     
-    // 🔥 WICHTIG: Teams bekommen hier ihre "Teilnahme"
+    // WICHTIG: Teams bekommen hier ihre "Teilnahme"
     await incrementParticipations();
 
     window.location.reload();
@@ -572,4 +603,4 @@ export default function DrawPage() {
       )}
     </main>
   );
-} 
+}
