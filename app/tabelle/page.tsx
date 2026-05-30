@@ -214,9 +214,11 @@ function TurnierTabelleContent() {
     if (g && extractedTeams.length > 0) {
       const grouped: any = {};
       g.forEach((row) => {
-        if (!grouped[row.group_name]) grouped[row.group_name] = [];
+        // Fallback falls der group_name "null" in der Datenbank ist
+        const safeGroupName = row.group_name || "A";
+        if (!grouped[safeGroupName]) grouped[safeGroupName] = [];
         const team = extractedTeams.find((team) => team.id === row.team_id);
-        if (team) grouped[row.group_name].push(team);
+        if (team) grouped[safeGroupName].push(team);
       });
       setGroups(grouped);
     }
@@ -284,14 +286,17 @@ function TurnierTabelleContent() {
                 </button>
               ))}
               <button onClick={() => handleGroupChange("ALL")} className={activeGroup === "ALL" ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md ml-2" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5 ml-2"}>Alle Gruppen</button>
-              {Object.keys(groups).map((g) => (
+              
+              {/* 🔥 HIER GEFIXT: .sort() eingefügt für korrekte Reihenfolge A, B, C, D... */}
+              {Object.keys(groups).sort().map((g) => (
                 <button key={g} onClick={() => handleGroupChange(g)} className={activeGroup === g ? "bg-yellow-500 text-black px-4 py-2 rounded-lg font-bold text-sm shadow-md" : "border border-white/10 px-4 py-2 rounded-lg text-sm transition hover:bg-white/5"}>Gruppe {g}</button>
               ))}
             </div>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2 items-start">
-            {Object.keys(groups).filter((g) => activeGroup === "ALL" || g === activeGroup).map((groupName) => {
+            {/* 🔥 HIER GEFIXT: .sort() eingefügt damit die Tabellen-Karten in der richtigen Reihenfolge stehen */}
+            {Object.keys(groups).sort().filter((g) => activeGroup === "ALL" || g === activeGroup).map((groupName) => {
               const table = currentTables[groupName] || [];
               return (
                 <Fragment key={groupName}>
@@ -303,7 +308,6 @@ function TurnierTabelleContent() {
                     <div className="w-full pb-1">
                       <div className="w-full">
                         
-                        {/* 🔥 HIER GEFIXT: Intelligentes 1fr-Grid anstatt 12 Spalten */}
                         <div className="grid grid-cols-[20px_25px_1fr_20px_20px_20px_20px_35px] md:grid-cols-[30px_40px_1fr_30px_30px_30px_30px_50px] gap-1 sm:gap-2 text-[9px] md:text-xs uppercase text-gray-400 mb-2 px-1 text-center font-bold italic items-center">
                           <span>#</span>
                           <span>Pkt</span>
@@ -319,13 +323,11 @@ function TurnierTabelleContent() {
                           const isTop = i < tournamentStyle.top_places;
                           const isBottom = i >= table.length - tournamentStyle.bottom_places;
                           return (
-                            // 🔥 HIER GEFIXT: Das gleiche intelligente Grid für die Reihen
                             <div key={team.id} style={{ background: isTop ? tournamentStyle.color_top + "20" : isBottom ? tournamentStyle.color_bottom + "20" : tournamentStyle.color_middle + "20", borderLeft: `4px solid ${isTop ? tournamentStyle.color_top : isBottom ? tournamentStyle.color_bottom : tournamentStyle.color_middle}` }} className="grid grid-cols-[20px_25px_1fr_20px_20px_20px_20px_35px] md:grid-cols-[30px_40px_1fr_30px_30px_30px_30px_50px] gap-1 sm:gap-2 text-[10px] md:text-sm py-2 border-b border-white/5 items-center text-center transition-colors hover:bg-white/5 pr-1">
                               
                               <span className={`font-black tracking-tight ${i === 0 ? "text-yellow-300 scale-110 text-sm md:text-xl" : "text-yellow-400 text-xs md:text-xl"}`}>{i + 1}</span>
                               <span className="text-white/90 font-bold text-xs md:text-sm">{team.pkt}</span>
                               
-                              {/* Die Teamcard nimmt sich jetzt das komplette "1fr" (den gesamten restlichen Platz) */}
                               <div className="flex items-center justify-start py-1 overflow-hidden w-full">
                                 <TeamCard team={team} isDu={myAllTeamIds.includes(team.id)} />
                               </div>
