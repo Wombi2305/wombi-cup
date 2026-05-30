@@ -26,7 +26,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   
   const [activeMobileRound, setActiveMobileRound] = useState<number | null>(null);
 
-  // 🔥 NEU: Referenz für den Scroll-Container (für die Pfeile)
+  // Referenz für den Scroll-Container (für die Pfeile)
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -177,6 +177,12 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     const numS1 = Number(s1);
     const numS2 = Number(s2);
 
+    // 🔥 NEU: Unentschieden in der K.O.-Phase blockieren
+    if (numS1 === numS2) {
+      alert("Ein Unentschieden ist in der K.O.-Phase nicht möglich! Bitte tragt das finale Ergebnis (inkl. Verlängerung/Elfmeterschießen) ein.");
+      return;
+    }
+
     setLocalMatches((prev) => 
       prev.map((m) => 
         m.id === matchId ? { ...m, score1: numS1, score2: numS2, status: "reported", reported_by: user?.id } : m
@@ -195,18 +201,39 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
   };
 
   const handleConfirm = async (matchId: number) => {
-    setLocalMatches((prev) => prev.map((m) => m.id === matchId ? { ...m, status: "confirmed", confirmed_by: user?.id } : m));
-    await supabase.from("matches").update({ status: "confirmed", confirmed_by: user?.id }).eq("id", matchId);
-
+    // 1. Lade das Match VOR dem asynchronen State-Update
     const match = localMatches.find((m) => m.id === matchId);
-    if (!match || match.score1 === null || match.score2 === null) return;
-
+    if (!match || match.score1 === null || match.score2 === null) {
+      alert("Fehler: Ergebnisse fehlen oder Match nicht gefunden.");
+      return;
+    }
+  
+    // 2. Optimistisches UI-Update für das aktuelle Match
+    setLocalMatches((prev) => 
+      prev.map((m) => m.id === matchId ? { ...m, status: "confirmed", confirmed_by: user?.id } : m)
+    );
+  
+    // 3. Datenbank-Update mit Error-Handling
+    const { error: confirmError } = await supabase
+      .from("matches")
+      .update({ status: "confirmed", confirmed_by: user?.id })
+      .eq("id", matchId);
+  
+    if (confirmError) {
+      console.error("Datenbank-Fehler beim Bestätigen:", confirmError);
+      alert("Das Spiel konnte nicht bestätigt werden. (Trigger geprüft?)");
+      setLocalMatches((prev) => prev.map((m) => m.id === matchId ? { ...m, status: "reported" } : m));
+      return;
+    }
+  
+    // 4. Gewinner ermitteln
     const team1Wins = match.score1 > match.score2;
     const team2Wins = match.score2 > match.score1;
-    
     const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
-    
+  
+    // 5. XP vergeben & INS NÄCHSTE MATCH WEITERREICHEN
     if (winningTeamId) {
+      
       const { data: winnerData } = await supabase
         .from('teams')
         .select('active_xp_boosts, bonus_xp')
@@ -216,11 +243,54 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
       if (winnerData && winnerData.active_xp_boosts > 0) {
         const goalsScored = team1Wins ? match.score1 : match.score2;
         const extraXp = 50 + (goalsScored * 10); 
-
+  
         await supabase.from('teams').update({
           active_xp_boosts: winnerData.active_xp_boosts - 1,
           bonus_xp: (winnerData.bonus_xp || 0) + extraXp
         }).eq('id', winningTeamId);
+      }
+  
+      // --- DYNAMISCHES WEITERREICHEN ---
+      const nextKoRound = match.ko_round / 2;
+      
+      // Nur weiterreichen, wenn das aktuelle Match NICHT das Finale ist
+      if (nextKoRound >= 2) {
+        // Alle Matches der aktuellen Runde holen und nach ID sortieren
+        const currentRoundMatches = localMatches
+          .filter(m => m.match_type === "ko" && m.ko_round === match.ko_round)
+          .sort((a, b) => a.id - b.id);
+          
+        const matchIndex = currentRoundMatches.findIndex(m => m.id === match.id);
+        
+        // Alle Matches der NÄCHSTEN Runde holen und sortieren
+        const nextRoundMatches = localMatches
+          .filter(m => m.match_type === "ko" && m.ko_round === nextKoRound)
+          .sort((a, b) => a.id - b.id);
+          
+        // Berechnen, in welches Match das Sieger-Team rückt
+        const nextMatchIndex = Math.floor(matchIndex / 2);
+        const nextMatch = nextRoundMatches[nextMatchIndex];
+        
+        if (nextMatch) {
+          // Gerade Indexe (0, 2, 4...) werden Team 1 (oben). Ungerade (1, 3, 5...) werden Team 2 (unten).
+          const isTeam1 = matchIndex % 2 === 0;
+          const updateField = isTeam1 ? { team1_id: winningTeamId } : { team2_id: winningTeamId };
+          
+          // SOFORTIGES UI UPDATE (TBD verschwindet lokal)
+          setLocalMatches((prev) => 
+            prev.map((m) => m.id === nextMatch.id ? { ...m, ...updateField } : m)
+          );
+          
+          // UPDATE in die Datenbank schreiben
+          const { error: advanceError } = await supabase
+            .from('matches')
+            .update(updateField)
+            .eq('id', nextMatch.id);
+            
+          if (advanceError) {
+            console.error("Fehler beim Vorrücken in die nächste Runde:", advanceError);
+          }
+        }
       }
     }
   };
@@ -230,7 +300,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     await supabase.from("matches").update({ score1: null, score2: null, status: "rejected", reported_by: null }).eq("id", matchId);
   };
 
-  // 🔥 NEU: Scroll Funktionen für die Pfeile
+  // Scroll Funktionen für die Pfeile
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollBy({ left: -350, behavior: 'smooth' });
@@ -318,7 +388,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
       =============================== */}
       <div className="hidden md:block w-full pt-6 relative group">
         
-        {/* 🔥 NEU: PFEIL NAVIGATION */}
+        {/* PFEIL NAVIGATION */}
         <div className="absolute right-0 top-0 flex gap-2 z-20 bg-[#0a0a0a] pl-4 pb-2">
           <button 
             onClick={scrollLeft} 
@@ -334,7 +404,6 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
           </button>
         </div>
 
-        {/* 🔥 HIER GEÄNDERT: scrollbar-hide hinzugefügt und ref gesetzt */}
         <div 
           ref={scrollContainerRef} 
           className="w-full overflow-x-auto pb-12 scrollbar-hide scroll-smooth"

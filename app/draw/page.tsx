@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import Image from "next/image"; // 🔥 NEU IMPORTIERT
+import Image from "next/image"; 
 
 const shuffleGroups = (groups: string[]) => {
   return [...groups].sort(() => Math.random() - 0.5);
@@ -21,7 +21,7 @@ const getTierImage = (level: number) => {
   return "/Bronze.png";
 };
 
-// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen (als Objekt für die Cosmetics)
+// 🔥 HELPER: Holt die passende Farbe für den Hintergrund & Rahmen
 const getTierStyles = (level: number) => {
   const l = level || 1;
   if (l >= 45) return { bg: "bg-fuchsia-500/20", border: "border-fuchsia-500/40", text: "text-fuchsia-50" };
@@ -34,7 +34,7 @@ const getTierStyles = (level: number) => {
   return { bg: "bg-amber-700/20", border: "border-amber-700/40", text: "text-amber-50" };
 };
 
-// 🔥 DIE UNIVERSELLE TEAM-CARD (Optimiert mit next/image) 🔥
+// 🔥 DIE UNIVERSELLE TEAM-CARD
 const TeamCard = ({ team, isDu = false, reverseOnMobile = false, isTBD = false, isWinner = false }: { team?: any, isDu?: boolean, reverseOnMobile?: boolean, isTBD?: boolean, isWinner?: boolean }) => {
   if (!team || isTBD) {
     return (
@@ -125,7 +125,7 @@ export default function DrawPage() {
     setMounted(true);
   }, []);
 
-  // 🔒 Zuverlässiges Discord-Login-System
+  // 🔒 Discord-Login-System
   useEffect(() => {
     const checkAccess = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -141,7 +141,6 @@ export default function DrawPage() {
         const res = await fetch(`/api/discord/member?userId=${discordId}`);
         const data = await res.json();
 
-        // --- GEÄNDERT: Turnierleitung Rolle hinzugefügt ---
         const ALLOWED_ROLES = [
           "1493976124173062195", // 🎥 Streamer
           "1492478735444873398", // 👑 Orga
@@ -199,7 +198,6 @@ export default function DrawPage() {
 
     fetchTournaments();
 
-    // 🔥 OPTIMIERUNG: Debounce für Realtime (verhindert massive Lags bei Registrierungen)
     let timeoutId: NodeJS.Timeout;
     const handleUpdate = () => {
       clearTimeout(timeoutId);
@@ -228,12 +226,6 @@ export default function DrawPage() {
     }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [selectedTournament]);
-
-  useEffect(() => {
-    if (!selectedTournament) return;
-    const selected = tournaments.find(t => t.id === selectedTournament);
-    if (selected) updateGroupNames(selected.group_count || 2);
-  }, [selectedTournament, tournaments]);
 
   useEffect(() => {
     if (selectedTournament) fetchTeams();
@@ -278,6 +270,29 @@ export default function DrawPage() {
     setLastGroup(null);
   };
 
+  // 🔥 NEUE HILFSFUNKTION: Gibt jedem Team +1 Participation
+  const incrementParticipations = async () => {
+    if (!teams || teams.length === 0) return;
+    const teamIds = teams.map(t => t.id);
+
+    // Aktuellen Stand laden
+    const { data: currentTeams } = await supabase
+      .from("teams")
+      .select("id, participations")
+      .in("id", teamIds);
+
+    if (currentTeams) {
+      // Alle Teams in der Datenbank updaten (+1)
+      const updatePromises = currentTeams.map(t => 
+        supabase
+          .from("teams")
+          .update({ participations: (t.participations || 0) + 1 })
+          .eq("id", t.id)
+      );
+      await Promise.all(updatePromises);
+    }
+  };
+
   const quickDraw = async () => {
     if (!selectedTournament) return alert("Turnier wählen");
     const selected = tournaments.find(t => t.id === selectedTournament);
@@ -298,6 +313,10 @@ export default function DrawPage() {
 
     await supabase.from("group_assignments").insert(inserts);
     await supabase.from("tournaments").update({ draw_finished: true }).eq("id", selectedTournament);
+    
+    // 🔥 WICHTIG: Teams bekommen hier ihre "Teilnahme"
+    await incrementParticipations();
+
     window.location.reload();
   };
 
@@ -377,6 +396,9 @@ export default function DrawPage() {
   const finishDraw = async () => {
     setFinished(true);
     await supabase.from("tournaments").update({ draw_finished: true }).eq("id", selectedTournament);
+    
+    // 🔥 WICHTIG: Teams bekommen hier ihre "Teilnahme" beim manuellen Durchklicken
+    await incrementParticipations();
   };
 
   if (!mounted || loadingAuth) {
@@ -460,7 +482,7 @@ export default function DrawPage() {
               />
             </div>
 
-            {/* 🔥 BIG REVEAL CARD (Optimiert mit next/image) 🔥 */}
+            {/* 🔥 BIG REVEAL CARD */}
             {drawIndex < shuffled.length && (
               <div className="min-h-[6rem] md:min-h-[8rem] flex items-center justify-center mb-10 w-full px-2">
                 {revealedTeam ? (
@@ -550,4 +572,4 @@ export default function DrawPage() {
       )}
     </main>
   );
-}
+} 

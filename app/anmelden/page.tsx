@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useTournaments } from "@/components/TournamentProvider";
-import TeamCard from "@/components/TeamCard"; // 🔥 HIER IMPORTIEREN (Pfad ggf. anpassen)
+import TeamCard from "@/components/TeamCard";
 
 export default function Anmelden() {
   const { tournaments, loading: tournamentsLoading, refreshTournaments } = useTournaments();
@@ -179,10 +179,18 @@ export default function Anmelden() {
       return showMessage("Check deine Berechtigung / Eingabe");
     }
 
+    // 🔥 NEU: Harter Check im Code, falls UI manipuliert wurde oder der Tab alt ist
+    const currentTournament = tournaments.find((t: any) => t.id === tournamentId);
+    if (currentTournament?.start_time) {
+      const startTimeMs = new Date(currentTournament.start_time).getTime();
+      if (startTimeMs - new Date().getTime() <= 3600000) {
+        return showMessage("❌ Die Anmeldung ist bereits geschlossen!");
+      }
+    }
+
     setLoading((prev) => ({ ...prev, [tournamentId]: true }));
 
     try {
-      const currentTournament = tournaments.find((t: any) => t.id === tournamentId);
       const registrations = currentTournament?.tournament_registrations || [];
       const approvedCount = registrations.filter((r: any) => r.status === "approved").length;
 
@@ -261,6 +269,12 @@ export default function Anmelden() {
               const freeSpots = t.max_teams ? Math.max(t.max_teams - approvedCount, 0) : null;
               const isFull = t.max_teams && approvedCount >= t.max_teams;
               const isReady = t.draw_finished === true;
+              
+              // 🔥 NEU: Check ob die Anmeldung geschlossen werden soll (1 Stunde)
+              const now = new Date();
+              const startTime = t.start_time ? new Date(t.start_time) : null;
+              const isRegistrationClosed = startTime ? (startTime.getTime() - now.getTime() <= 3600000) : false;
+              
               const percent = t.max_teams ? Math.min((approvedCount / t.max_teams) * 100, 100) : 0;
               
               const myRegistrations = registrations.filter((r: any) => r.teams?.user_id === user?.id);
@@ -289,6 +303,10 @@ export default function Anmelden() {
                       {isReady ? (
                         <span className="px-3 py-1 bg-green-500/20 border border-green-500/50 text-green-400 text-[10px] uppercase font-black tracking-widest rounded-full shadow-[0_0_10px_rgba(34,197,94,0.3)] animate-pulse">
                           Live
+                        </span>
+                      ) : isRegistrationClosed ? (
+                        <span className="px-3 py-1 bg-gray-500/20 border border-gray-500/50 text-gray-400 text-[10px] uppercase font-black tracking-widest rounded-full shadow-[0_0_10px_rgba(107,114,128,0.3)]">
+                          Geschlossen
                         </span>
                       ) : isFull ? (
                         <span className="px-3 py-1 bg-red-500/20 border border-red-500/50 text-red-400 text-[10px] uppercase font-black tracking-widest rounded-full">
@@ -378,7 +396,13 @@ export default function Anmelden() {
                           </div>
                         )}
 
-                        {(availableTeams.length > 0 || ownedTeams.length === 0) && (
+                        {/* 🔥 NEU: Blockiert das Formular, wenn die Anmeldung zu ist */}
+                        {isRegistrationClosed && !isReady ? (
+                          <div className="mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
+                            <p className="text-red-400 text-xs font-bold uppercase tracking-widest">Anmeldung beendet</p>
+                            <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-wider">Turnier startet in Kürze</p>
+                          </div>
+                        ) : (availableTeams.length > 0 || ownedTeams.length === 0) && (
                           <form onSubmit={(e) => handleSubmit(e, Number(t.id))} className="flex flex-col gap-3 pt-4 border-t border-white/10">
                             {(!dbCheckDone || isCheckingDiscord) ? (
                               <div className="w-full p-4 rounded-2xl bg-white/5 border border-white/10 text-center text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">
