@@ -36,6 +36,7 @@ export default function Anmelden() {
   
   const hasRequiredRole = hasDbRole || hasDiscordRole;
 
+  // 🔥 GEFIXT: Ein einziger, sicherer useEffect für DB und Discord
   useEffect(() => {
     const init = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -43,68 +44,61 @@ export default function Anmelden() {
       setUser(currentUser);
 
       if (currentUser) {
+        // 1. Profil aus der Datenbank laden
         const { data: profile } = await supabase
           .from("profiles")
           .select("role")
           .eq("id", currentUser.id)
           .single();
           
-        if (profile) {
-          setUserProfile(profile);
-        }
+        if (profile) setUserProfile(profile);
 
+        // 2. Teams aus der Datenbank laden
         const { data: teams } = await supabase
           .from("teams")
           .select("id, teamname, captain, is_active, user_id, level, logo_url, equipped_border, equipped_color, equipped_banner, team_rewards(*)")
           .eq("user_id", currentUser.id)
           .eq("is_deleted", false);
         
-        if (teams) {
-          setOwnedTeams(teams);
+        if (teams) setOwnedTeams(teams);
+
+        // 3. Discord Check (Direkt über die Supabase Session, OHNE LocalStorage!)
+        const discordId = currentUser.user_metadata?.provider_id;
+        
+        if (discordId) {
+          // Cache-Key an die spezifische ID binden, damit sich Accounts nicht überschneiden
+          const cacheKey = `discord_cache_${discordId}`;
+          const timeKey = `discord_time_${discordId}`;
+          
+          const cachedDiscordData = sessionStorage.getItem(cacheKey);
+          const cachedTime = sessionStorage.getItem(timeKey);
+          const now = new Date().getTime();
+
+          if (cachedDiscordData && cachedTime && (now - parseInt(cachedTime)) < 300000) {
+            setDiscordUser(JSON.parse(cachedDiscordData));
+          } else {
+            try {
+              const res = await fetch(`/api/discord/member?userId=${discordId}`);
+              const data = await res.json();
+              
+              if (!data.error) {
+                setDiscordUser(data);
+                sessionStorage.setItem(cacheKey, JSON.stringify(data));
+                sessionStorage.setItem(timeKey, now.toString());
+              }
+            } catch (err) {
+              console.error("Discord Fetch Error:", err);
+            }
+          }
         }
       }
+      
+      // Ladezustände beenden
+      setIsCheckingDiscord(false);
       setDbCheckDone(true);
     };
+    
     init();
-  }, []);
-
-  // Discord-Check
-  useEffect(() => {
-    const checkDiscord = async () => {
-      const userId = localStorage.getItem("discord_user_id");
-      if (!userId) {
-        setIsCheckingDiscord(false);
-        return;
-      }
-
-      const cachedDiscordData = sessionStorage.getItem("discord_cache");
-      const cachedTime = sessionStorage.getItem("discord_cache_time");
-      const now = new Date().getTime();
-
-      if (cachedDiscordData && cachedTime && (now - parseInt(cachedTime)) < 300000) {
-        setDiscordUser(JSON.parse(cachedDiscordData));
-        setIsCheckingDiscord(false);
-        return; 
-      }
-
-      try {
-        const res = await fetch(`/api/discord/member?userId=${userId}`);
-        const data = await res.json();
-        
-        if (!data.error) {
-          setDiscordUser(data);
-          sessionStorage.setItem("discord_cache", JSON.stringify(data));
-          sessionStorage.setItem("discord_cache_time", now.toString());
-        } else {
-          setDiscordUser(null);
-        }
-      } catch (err) {
-        setDiscordUser(null);
-      } finally {
-        setIsCheckingDiscord(false); 
-      }
-    };
-    checkDiscord();
   }, []);
 
   // Standardwerte setzen
@@ -179,7 +173,6 @@ export default function Anmelden() {
       return showMessage("Check deine Berechtigung / Eingabe");
     }
 
-    // 🔥 NEU: Harter Check im Code, falls UI manipuliert wurde oder der Tab alt ist
     const currentTournament = tournaments.find((t: any) => t.id === tournamentId);
     if (currentTournament?.start_time) {
       const startTimeMs = new Date(currentTournament.start_time).getTime();
@@ -270,7 +263,6 @@ export default function Anmelden() {
               const isFull = t.max_teams && approvedCount >= t.max_teams;
               const isReady = t.draw_finished === true;
               
-              // 🔥 NEU: Check ob die Anmeldung geschlossen werden soll (1 Stunde)
               const now = new Date();
               const startTime = t.start_time ? new Date(t.start_time) : null;
               const isRegistrationClosed = startTime ? (startTime.getTime() - now.getTime() <= 3600000) : false;
@@ -396,7 +388,6 @@ export default function Anmelden() {
                           </div>
                         )}
 
-                        {/* 🔥 NEU: Blockiert das Formular, wenn die Anmeldung zu ist */}
                         {isRegistrationClosed && !isReady ? (
                           <div className="mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
                             <p className="text-red-400 text-xs font-bold uppercase tracking-widest">Anmeldung beendet</p>
@@ -414,18 +405,12 @@ export default function Anmelden() {
                               onClick={async () => {
                                try {
                                  const origin = window.location.origin;
-
-                                 const currentPath =
-                                  window.location.pathname + window.location.search;
-
-                                 const redirectUrl =
-                                  `${origin}/auth/callback?next=${encodeURIComponent(currentPath)}`;
+                                 const currentPath = window.location.pathname + window.location.search;
+                                 const redirectUrl = `${origin}/auth/callback?next=${encodeURIComponent(currentPath)}`;
 
                                 await supabase.auth.signInWithOAuth({
                                  provider: "discord",
-                                 options: {
-                                  redirectTo: redirectUrl,
-                                  },
+                                 options: { redirectTo: redirectUrl },
                                });
                               } catch (error) {
                                 console.error("Discord Login Fehler:", error);
