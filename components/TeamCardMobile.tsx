@@ -74,13 +74,13 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
         />
       )}
 
-      {/* Die Abstände wachsen und schrumpfen (gap-[2cqi]) ab jetzt auch automatisch mit! */}
-      <div className={`relative z-10 flex items-center gap-[2cqi] min-w-0 max-w-full flex-row mx-auto ${reverseOnMobile ? 'flex-row-reverse' : ''}`}>
+      {/* Die Abstände wachsen und schrumpfen (gap-[3cqi]) ab jetzt auch automatisch mit! */}
+      <div className={`relative z-10 flex items-center gap-[3cqi] min-w-0 max-w-full flex-row mx-auto ${reverseOnMobile ? 'flex-row-reverse' : ''}`}>
         
-        {/* 🔥 FLUID LOGO: Es ist jetzt immer exakt 12% der Kartenbreite groß! */}
+        {/* 🔥 FLUID LOGO: Es ist jetzt etwas größer (16cqi statt 12cqi)! */}
         <div 
           className={`relative shrink-0 flex items-center justify-center rounded-full overflow-hidden drop-shadow-md ${isWinner ? 'ring-1 ring-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.6)]' : ''}`}
-          style={{ width: "12cqi", height: "12cqi" }}
+          style={{ width: "16cqi", height: "16cqi" }}
         >
           {team.logo_url ? (
             <Image 
@@ -101,16 +101,16 @@ export default function TeamCardMobile({ team, isDu = false, reverseOnMobile = f
           )}
         </div>
         
-        {/* 🔥 FLUID TEXT: Die Schriftgröße liest die Kartenbreite und passt sich stufenlos an! */}
+        {/* 🔥 FLUID TEXT: Die Schriftgröße liest die Kartenbreite und passt sich stufenlos etwas größer an! */}
         <span 
           className={`truncate shrink leading-none tracking-tight transition-colors duration-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] ${textColor}`}
-          style={{ fontSize: "clamp(10px, 5.5cqi, 15px)" }}
+          style={{ fontSize: "clamp(12px, 7cqi, 18px)" }}
         >
           {team.name || team.teamname}
           {isDu && (
             <span 
               className="ml-[1cqi] opacity-90 font-black uppercase tracking-wider text-yellow-500 shrink-0 relative top-[1px]"
-              style={{ fontSize: "clamp(7px, 3.5cqi, 10px)" }}
+              style={{ fontSize: "clamp(8px, 4.5cqi, 12px)" }}
             >
               (Du)
             </span>
