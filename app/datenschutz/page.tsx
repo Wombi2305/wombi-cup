@@ -211,9 +211,9 @@ export default function DatenschutzPage() {
           </button>
         ) : (
           <div className="text-gray-300 leading-relaxed animate-in fade-in duration-500">
-            <p className="text-white text-lg mb-1">[Florian] [Unger]</p>
-            <p>[Marburger] [86]</p>
-            <p>[35398] [Giessen]</p>
+            <p className="text-white text-lg mb-1">Florian Unger</p>
+            <p>Marburger Str. 86</p>
+            <p>35398 Giessen</p>
             <p className="mt-2 text-blue-400 hover:underline"><a href="mailto:noamacklemore@gmail.com">noamacklemore@gmail.com</a></p>
             <button 
               onClick={() => setShowContact(false)}
@@ -243,7 +243,7 @@ export default function DatenschutzPage() {
 
       {/* STAND */}
       <div className="text-gray-600 text-[10px] uppercase tracking-widest mt-2 pl-2">
-        Stand: Mai 2026
+        Stand: Juni 2026
       </div>
 
     </div>

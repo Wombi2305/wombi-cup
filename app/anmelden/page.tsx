@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useTournaments } from "@/components/TournamentProvider";
@@ -32,7 +33,7 @@ export default function Anmelden() {
   // Rollen-Check
   const requiredRoleId = String(process.env.NEXT_PUBLIC_TEAMVM_ROLE_ID || "1492462340787011624");
   const hasDiscordRole = discordUser?.roles?.map(String).includes(requiredRoleId);
-  const hasDbRole = userProfile?.role === "teamvm" || userProfile?.role === "admin";
+  const hasDbRole = userProfile?.role === "teamvm" || userProfile?.role === "admin" || userProfile?.role === "orga";
   
   const hasRequiredRole = hasDbRole || hasDiscordRole;
 

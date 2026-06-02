@@ -12,14 +12,15 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
   const [groupAssignments, setGroupAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const fetchTimeout = useRef<NodeJS.Timeout | null>(null);
+  // TypeScript Fix: Im Browser ('use client') ist ReturnType<typeof setTimeout> sicherer als NodeJS.Timeout
+  const fetchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Zentrale Funktion zum Laden ALLER relevanten Daten (Parallel für maximalen Speed)
   const fetchAllData = async () => {
     const [tournamentsRes, matchesRes, assignmentsRes] = await Promise.all([
       supabase
         .from("tournaments")
-        // 🔥 HIER IST DER FIX: team_rewards und custom_rewards werden jetzt mitgeladen!
+        // teams(*) holt ab sofort auch vollautomatisch euer neues Level, die Inventar-Tickets und die All-Time Stats!
         .select(`*, tournament_registrations(*, teams(*, team_rewards(*, custom_rewards(*))))`)
         .order("start_time", { ascending: true }),
       supabase
@@ -61,6 +62,8 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       .on("postgres_changes", { event: "*", schema: "public", table: "tournament_registrations" }, handleUpdate)
       .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, handleUpdate)
       .on("postgres_changes", { event: "*", schema: "public", table: "group_assignments" }, handleUpdate)
+      // 🔥 NEU: Überwacht jetzt auch die Teams! (Wichtig für Level-Ups und Inventar-Updates im Hintergrund)
+      .on("postgres_changes", { event: "*", schema: "public", table: "teams" }, handleUpdate)
       .subscribe();
 
     return () => {
@@ -76,7 +79,7 @@ export function TournamentProvider({ children }: { children: React.ReactNode }) 
       groupAssignments, 
       loading, 
       refreshData: fetchAllData,
-      refreshTournaments: fetchAllData // 🔥 Beide Namen sind jetzt verfügbar.
+      refreshTournaments: fetchAllData 
     }}>
       {children}
     </TournamentContext.Provider>

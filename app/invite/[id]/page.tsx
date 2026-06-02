@@ -60,13 +60,12 @@ export default function InvitePage() {
 
   useEffect(() => {
     const fetchInviteData = async () => {
-      const token = params.id as string; // 🔥 id entspricht hier dem kryptischen invite_token aus der URL
+      const token = params.id as string; 
       if (!token) {
         setLoading(false);
         return;
       }
 
-      // 🔥 GEÄNDERT: Wir filtern nach 'invite_token' statt nach der numerischen ID
       const { data: teamData, error: teamError } = await supabase
         .from("teams")
         .select("*")
@@ -189,6 +188,9 @@ export default function InvitePage() {
     );
   }
 
+  // Berechne die gesamten Matches (für die Anzeige)
+  const totalMatches = (team.total_match_wins || 0) + (team.total_match_losses || 0);
+
   return (
     <main className="min-h-[calc(100vh-80px)] px-4 py-12 flex flex-col items-center justify-center text-white relative overflow-hidden">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-yellow-500/10 rounded-full blur-[120px] pointer-events-none z-0 opacity-50"></div>
@@ -226,9 +228,9 @@ export default function InvitePage() {
           <div className="bg-black/40 border border-white/5 p-4 rounded-xl flex flex-col items-center relative overflow-hidden shadow-inner">
             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
             <span className="text-3xl font-black text-purple-400 mb-1 drop-shadow-[0_0_10px_rgba(168,85,247,0.3)]">
-              {team.participations || 0}
+              {totalMatches}
             </span>
-            <span className="text-gray-500 text-[9px] uppercase tracking-widest font-semibold">Events</span>
+            <span className="text-gray-500 text-[9px] uppercase tracking-widest font-semibold">Spiele</span>
           </div>
 
           <div className="bg-yellow-500/5 border border-yellow-500/20 p-4 rounded-xl flex flex-col items-center relative overflow-hidden shadow-[0_0_15px_rgba(250,204,21,0.05)]">

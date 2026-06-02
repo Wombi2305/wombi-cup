@@ -277,27 +277,6 @@ export default function DrawPage() {
     setLastGroup(null);
   };
 
-  // 🔥 NEUE HILFSFUNKTION: Gibt jedem Team +1 Participation
-  const incrementParticipations = async () => {
-    if (!teams || teams.length === 0) return;
-    const teamIds = teams.map(t => t.id);
-
-    const { data: currentTeams } = await supabase
-      .from("teams")
-      .select("id, participations")
-      .in("id", teamIds);
-
-    if (currentTeams) {
-      const updatePromises = currentTeams.map(t => 
-        supabase
-          .from("teams")
-          .update({ participations: (t.participations || 0) + 1 })
-          .eq("id", t.id)
-      );
-      await Promise.all(updatePromises);
-    }
-  };
-
   // 🔥 GEFIXT: Völlig zufällige Verteilung der Gruppen, ähnlich wie Live Draw
   const quickDraw = async () => {
     if (!selectedTournament) return alert("Turnier wählen");
@@ -345,9 +324,6 @@ export default function DrawPage() {
 
     await supabase.from("tournaments").update({ draw_finished: true }).eq("id", selectedTournament);
     
-    // WICHTIG: Teams bekommen hier ihre "Teilnahme"
-    await incrementParticipations();
-
     window.location.reload();
   };
 
@@ -427,9 +403,6 @@ export default function DrawPage() {
   const finishDraw = async () => {
     setFinished(true);
     await supabase.from("tournaments").update({ draw_finished: true }).eq("id", selectedTournament);
-    
-    // 🔥 WICHTIG: Teams bekommen hier ihre "Teilnahme" beim manuellen Durchklicken
-    await incrementParticipations();
   };
 
   if (!mounted || loadingAuth) {

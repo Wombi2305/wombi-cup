@@ -983,14 +983,14 @@ function MeineTeamsContent() {
                         <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-center">
                           <div className="w-[30%] sm:flex-1 bg-fuchsia-500/5 border border-fuchsia-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-fuchsia-500 to-transparent"></div>
-                            <span className="text-fuchsia-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(217,70,239,0.5)]">{currentTeam.participations || 0}</span>
-                            <span className="text-[9px] md:text-[10px] text-fuchsia-400/80 uppercase tracking-widest mt-1 font-semibold">Events</span>
+                            <span className="text-fuchsia-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(217,70,239,0.5)]">{totalMatches}</span>
+                            <span className="text-[9px] md:text-[10px] text-fuchsia-400/80 uppercase tracking-widest mt-1 font-semibold">Spiele</span>
                           </div>
                           
                           <div className="w-[30%] sm:flex-1 bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500 to-transparent"></div>
                             <span className="text-yellow-400 font-black text-lg md:text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]">{currentTeam.wins_top1 || 0}</span>
-                            <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold">Siege</span>
+                            <span className="text-[9px] md:text-[10px] text-yellow-500/80 uppercase tracking-widest mt-1 font-semibold">Cup Siege</span>
                           </div>
                           
                           <div className="w-[30%] sm:flex-1 bg-slate-400/5 border border-slate-400/20 rounded-2xl p-2 sm:p-3 flex flex-col justify-center relative overflow-hidden">

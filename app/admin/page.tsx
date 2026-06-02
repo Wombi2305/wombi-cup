@@ -1,10 +1,12 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, Fragment } from "react";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image"; 
+import TeamCard from "@/components/TeamCard"; // 🔥 Globale TeamCard importiert
 
 export default function Admin() {
   const [loggedIn, setLoggedIn] = useState(false);
-  const [isFullAdmin, setIsFullAdmin] = useState(false); // --- NEU: Prüft ob Orga oder "nur" Turnierleitung ---
+  const [isFullAdmin, setIsFullAdmin] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [tournaments, setTournaments] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
@@ -31,6 +33,17 @@ export default function Admin() {
   const [koSizes, setKoSizes] = useState<{[key: number]: number}>({});
   const [isGeneratingKo, setIsGeneratingKo] = useState(false);
 
+  // 🔥 NEU: Speichert pro Turnier, ob Hin- und Rückspiel gewünscht ist
+  const [doubleRoundRobin, setDoubleRoundRobin] = useState<{[key: number]: boolean}>({});
+
+  // State für die Admin-Benachrichtigungen (Toasts)
+  const [adminMessage, setAdminMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
+
+  const showAdminMessage = (text: string, type: 'error' | 'success') => {
+    setAdminMessage({ text, type });
+    setTimeout(() => setAdminMessage(null), 5000);
+  };
+
   useEffect(() => {
     const check = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -45,16 +58,15 @@ export default function Admin() {
         const res = await fetch(`/api/discord/member?userId=${userId}`);
         const data = await res.json();
         
-        // --- GEÄNDERT: Rollen-Check für Orga & Turnierleitung ---
         const ORGA_ROLE_ID = "1492478735444873398"; 
-        const TL_ROLE_ID = "1504431450177667092"; // Turnierleitung
+        const TL_ROLE_ID = "1504431450177667092";
 
         const hasOrgaRole = data.roles?.some((r: string) => r === ORGA_ROLE_ID);
         const hasTlRole = data.roles?.some((r: string) => r === TL_ROLE_ID);
 
         if (hasOrgaRole || hasTlRole) {
           setLoggedIn(true);
-          setIsFullAdmin(hasOrgaRole); // Nur wenn er die Orga-Rolle hat, ist er Full-Admin
+          setIsFullAdmin(hasOrgaRole);
           fetchData();
         } else {
           setLoggedIn(false);
@@ -78,7 +90,19 @@ export default function Admin() {
       .on("postgres_changes", { event: "*", schema: "public", table: "group_assignments" }, () => fetchGroups())
       .on("postgres_changes", { event: "*", schema: "public", table: "tournament_registrations" }, () => fetchData())
       .on("postgres_changes", { event: "*", schema: "public", table: "teams" }, () => fetchData())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "matches" }, (payload) => {
+        fetchData();
+        const oldRow = payload.old as any;
+        const newRow = payload.new as any;
+        
+        if (newRow.status === "rejected" && oldRow.status !== "rejected") {
+           showAdminMessage("🚨 Konflikt! Ein Ergebnis wurde abgelehnt.", "error");
+        } else if (newRow.status === "confirmed" && oldRow.status !== "confirmed") {
+           showAdminMessage("✅ Ein Ergebnis wurde von den Teams bestätigt.", "success");
+        }
+      })
       .subscribe();
+      
     return () => { supabase.removeChannel(channel); };
   }, [loggedIn]);
 
@@ -106,9 +130,10 @@ export default function Admin() {
   };
 
   const fetchGroups = async () => {
+    // 🔥 GEFIXT: teams(*) lädt nun alle Custom-Rewards mit herunter (für die globale TeamCard)
     const { data: regs } = await supabase
       .from("tournament_registrations")
-      .select("*, teams(*)")
+      .select("*, teams(*, team_rewards(*, custom_rewards(*)))") 
       .order("created_at", { ascending: true });
       
     const { data: assignments } = await supabase.from("group_assignments").select("*");
@@ -120,6 +145,7 @@ export default function Admin() {
           tournament_id: r.tournament_id,
           status: r.status,
           teamname: r.teams?.teamname,
+          teams: r.teams // 🔥 Ganzes Team-Objekt für die TeamCard weiterreichen
       }));
       setTeams(mappedTeams);
     }
@@ -132,7 +158,8 @@ export default function Admin() {
         
         const reg = regs.find((r: any) => r.team_id === row.team_id && r.status === "approved");
         if (reg && reg.teams) {
-          grouped[row.tournament_id][row.group_name].push({ id: row.team_id, teamname: reg.teams.teamname });
+          // 🔥 Auch hier das komplette Team weiterreichen
+          grouped[row.tournament_id][row.group_name].push({ id: row.team_id, teamname: reg.teams.teamname, fullTeam: reg.teams });
         }
       });
       setGroups(grouped);
@@ -250,7 +277,7 @@ export default function Admin() {
   };
 
   const handleSaveDesignModal = async (id: number, updatedData: any) => {
-    if (!isFullAdmin) return; // Sicherheits-Check
+    if (!isFullAdmin) return;
     const { error } = await supabase
       .from("tournaments")
       .update({
@@ -280,8 +307,8 @@ export default function Admin() {
   };
 
   const resetTournament = async (tournamentId: number) => {
-    if (!isFullAdmin) return; // Sicherheits-Check
-    if (!confirm("Turnier wirklich zurücksetzen? ❗ Alle Spiele und Gruppenzuweisungen werden gelöscht!")) return;
+    if (!isFullAdmin) return; 
+    if (!confirm("Turnier wirklich zurücksetzen? ❗ Alle Spiele und Gruppenzuweisungen werden gelöscht! (Tore & Wins aus All-Time Stats werden dank Trigger automatisch wieder abgezogen!)")) return;
 
     const { error: matchError } = await supabase.from("matches").delete().eq("tournament_id", tournamentId);
     const { error: groupError } = await supabase.from("group_assignments").delete().eq("tournament_id", tournamentId);
@@ -309,6 +336,7 @@ export default function Admin() {
     if (deleteError) return alert(`Fehler beim Löschen alter Spiele: ${deleteError.message}`);
 
     const inserts: any[] = [];
+    const isDoubleRoundRobin = !!doubleRoundRobin[tournamentId];
 
     Object.entries(tournamentGroups).forEach(([group, groupTeams]: any) => {
       let teamsForRotation = [...groupTeams];
@@ -324,22 +352,20 @@ export default function Admin() {
           const t2 = teamsForRotation[teamsForRotation.length - 1 - i];
           
           if (t1.id && t2.id) {
-            // 🔥 NEU: Heimrecht-Logik für Fairness
             let homeTeam = t1;
             let awayTeam = t2;
 
             if (i === 0) {
-              // Das feste Team auf Position 0 wechselt jede Runde sein Heimrecht
               if (round % 2 !== 0) {
                 homeTeam = t2;
                 awayTeam = t1;
               }
             } 
-            // Bei i > 0 gleicht sich das Heimrecht automatisch durch das Rotieren aus
 
             const isHomeFreilos = homeTeam.teamname === "--- FREILOS ---";
             const isAwayFreilos = awayTeam.teamname === "--- FREILOS ---";
 
+            // 🔥 HINSPIEL
             inserts.push({
               tournament_id: tournamentId,
               group_name: group,
@@ -353,9 +379,25 @@ export default function Admin() {
               reported_by: null,
               confirmed_by: null
             });
+
+            // 🔥 RÜCKSPIEL
+            if (isDoubleRoundRobin) {
+              inserts.push({
+                tournament_id: tournamentId,
+                group_name: group,
+                team1_id: awayTeam.id, // Umgedreht
+                team2_id: homeTeam.id, // Umgedreht
+                match_type: "group",
+                round: round + 1 + numRounds, 
+                status: (isHomeFreilos || isAwayFreilos) ? "confirmed" : "pending",
+                score1: isAwayFreilos ? 0 : (isHomeFreilos ? 1 : null), // Umgedreht
+                score2: isAwayFreilos ? 1 : (isHomeFreilos ? 0 : null), // Umgedreht
+                reported_by: null,
+                confirmed_by: null
+              });
+            }
           }
         }
-        // Rotation für die nächste Runde: Letztes Element wandert an Position 1
         teamsForRotation.splice(1, 0, teamsForRotation.pop()!);
       }
     });
@@ -655,7 +697,8 @@ export default function Admin() {
       top_places: 2,
       bottom_places: 1,
       started: false,
-      draw_finished: false
+      draw_finished: false,
+      season: 0 // 🔥 NEU: Default auf Season 0
     }]);
 
     if (error) return alert(`Fehler: ${error.message}`);
@@ -697,11 +740,61 @@ export default function Admin() {
 
   const tournamentToEdit = tournaments.find(t => t.id === editingId);
   const tournamentToDesign = tournaments.find(t => t.id === openDesignId);
+  
+  // Liste der abgelehnten Matches (Konflikte)
+  const rejectedMatches = matches.filter(m => m.status === "rejected");
 
   return (
     <main className="min-h-screen pt-24 pb-12 text-white px-4 md:px-6 max-w-[1600px] mx-auto w-full">
       
-      {/* Turniere anlegen darf jeder mit Zugriff aufs Panel */}
+      {/* Der Live-Toast für den Admin */}
+      {adminMessage && (
+        <div className={`fixed top-24 right-4 px-6 py-4 rounded-2xl shadow-2xl z-50 animate-in slide-in-from-top-4 border backdrop-blur-md font-bold transition-all ${
+          adminMessage.type === "error" ? "bg-red-500/90 border-red-500/50 text-white" : "bg-green-500/90 border-green-500/50 text-white"
+        }`}>
+          {adminMessage.text}
+        </div>
+      )}
+
+      {/* Das dauerhafte Konflikt-Dashboard */}
+      {rejectedMatches.length > 0 && (
+        <div className="mb-10 p-6 bg-red-500/10 border border-red-500/30 rounded-[2rem] shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-red-500/5 to-transparent pointer-events-none" />
+          <h2 className="text-red-400 font-black text-xl md:text-2xl mb-4 flex items-center gap-3 relative z-10">
+            <span className="animate-pulse text-2xl">🚨</span> Konflikte / Abgelehnte Ergebnisse
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 relative z-10">
+            {rejectedMatches.map(m => {
+              const t1 = teams.find(t => t.id === m.team1_id)?.teamname || "Team 1";
+              const t2 = teams.find(t => t.id === m.team2_id)?.teamname || "Team 2";
+              const tourney = tournaments.find(t => t.id === m.tournament_id)?.name || "Turnier";
+              
+              let matchInfo = "";
+              if (m.match_type === "ko") {
+                const roundName = m.ko_round === 64 ? "1/32-Finale" : m.ko_round === 32 ? "Sechzehntelfinale" : m.ko_round === 16 ? "Achtelfinale" : m.ko_round === 8 ? "Viertelfinale" : m.ko_round === 4 ? "Halbfinale" : m.ko_round === 2 ? "Finale" : "K.O.-Phase";
+                matchInfo = `🏆 ${roundName}`;
+              } else {
+                matchInfo = `⚽ Gruppe ${m.group_name || "?"}`;
+              }
+              
+              return (
+                <div key={m.id} className="flex flex-col sm:flex-row justify-between sm:items-center bg-black/40 p-4 rounded-xl border border-red-500/20 gap-3">
+                  <div>
+                    <div className="text-[10px] text-red-400/80 uppercase tracking-widest font-bold mb-1 flex items-center">
+                      {tourney} <span className="mx-2 opacity-40">•</span> <span className="text-red-300">{matchInfo}</span>
+                    </div>
+                    <div className="font-bold text-white text-sm md:text-base">{t1} <span className="text-gray-500 mx-2">vs</span> {t2}</div>
+                  </div>
+                  <div className="text-xs bg-red-600/20 text-red-400 px-3 py-1.5 rounded-lg font-bold border border-red-500/30 text-center uppercase tracking-wider">
+                    Wartet auf Klärung
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <button onClick={() => setShowPopup(true)} className="w-full md:w-auto bg-green-600 px-6 py-3 md:py-2 rounded-xl font-bold mb-8 md:mb-10 hover:bg-green-500 transition shadow-lg shadow-green-900/20">
         + Neues Turnier
       </button>
@@ -730,7 +823,6 @@ export default function Admin() {
                   <div className="flex flex-wrap gap-2 mt-3">
                     <button onClick={() => setEditingId(t.id)} className="text-[10px] md:text-xs px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 uppercase font-bold hover:bg-blue-500/20 transition">✏️ Edit</button>
                     
-                    {/* --- GEÄNDERT: Design-Knopf nur für Orga (isFullAdmin) --- */}
                     {isFullAdmin && (
                       <button onClick={() => setOpenDesignId(t.id)} className="text-[10px] md:text-xs px-3 py-1.5 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20 uppercase font-bold hover:bg-purple-500/20 transition">🎨 Design</button>
                     )}
@@ -740,7 +832,6 @@ export default function Admin() {
                 </div>
                 <div className="flex flex-wrap gap-2 w-full xl:w-auto justify-start xl:justify-end">
                   
-                  {/* --- GEÄNDERT: Neustart-Knopf nur für Orga (isFullAdmin) --- */}
                   {isFullAdmin && (
                     <button onClick={() => resetTournament(t.id)} className="flex-1 xl:flex-none bg-red-600/10 text-red-500 px-3 py-2 rounded-lg text-xs font-bold border border-red-500/20 hover:bg-red-600 hover:text-white transition text-center">🔄 Neustart</button>
                   )}
@@ -754,7 +845,6 @@ export default function Admin() {
                 <button onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "teams" })} className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'teams' ? 'text-white border-b-2 border-white' : 'text-gray-500 hover:text-gray-300'}`}>👥 Teams</button>
                 <button onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "gruppen" })} className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'gruppen' ? 'text-green-400 border-b-2 border-green-400' : 'text-gray-500 hover:text-gray-300'}`}>⚽ Gruppen</button>
                 
-                {/* K.O.-Phase Button nur anzeigen, wenn es KEIN T-Cup ist */}
                 {t.cup_type !== 't_cup' && (
                   <button onClick={() => setActiveTabs({ ...activeTabs, [t.id]: "ko" })} className={`pb-3 px-2 md:px-4 text-xs md:text-sm whitespace-nowrap uppercase tracking-wider font-bold transition-colors ${currentTab === 'ko' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-500 hover:text-gray-300'}`}>🏆 K.O.-Phase</button>
                 )}
@@ -805,15 +895,31 @@ export default function Admin() {
                           <div key={group} className="p-3 bg-white/5 rounded-xl border border-white/10">
                             <p className="text-green-400 font-bold text-xs mb-2 text-center uppercase tracking-wider">Gruppe {group}</p>
                             {teams.map((team: any, i: number) => (
-                              <div key={team.id} className="text-xs py-1.5 border-t border-white/5 flex gap-2">
-                                <span className="text-gray-500 w-4 text-right">{i + 1}.</span> 
-                                <span className="truncate font-medium">{team.teamname}</span>
+                              <div key={team.id} className="py-1.5 border-t border-white/5 flex gap-2">
+                                <span className="text-gray-500 w-4 text-right text-xs mt-1.5">{i + 1}.</span> 
+                                {/* 🔥 TEAMCARD in den Admin Gruppen! */}
+                                <div className="flex-1 overflow-hidden">
+                                  <TeamCard team={team.fullTeam} />
+                                </div>
                               </div>
                             ))}
                           </div>
                         ))}
                       </div>
-                      <button onClick={() => generateMatches(t.id)} className="w-full bg-green-600/20 border border-green-500/30 text-green-400 py-3 md:py-4 rounded-xl font-bold text-sm md:text-base hover:bg-green-600 hover:text-white transition shadow-lg mt-2">⚽ Spielplan generieren</button>
+                      
+                      {/* 🔥 NEU: Schalter für Hin- und Rückspiel */}
+                      <div className="flex flex-col gap-2 mt-4">
+                        <label className="flex items-center justify-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white transition bg-black/20 py-3 rounded-xl border border-white/5">
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 accent-green-500"
+                            checked={!!doubleRoundRobin[t.id]} 
+                            onChange={(e) => setDoubleRoundRobin({...doubleRoundRobin, [t.id]: e.target.checked})} 
+                          />
+                          <span className="font-bold">Mit Hin- und Rückspiel generieren</span>
+                        </label>
+                        <button onClick={() => generateMatches(t.id)} className="w-full bg-green-600/20 border border-green-500/30 text-green-400 py-3 md:py-4 rounded-xl font-bold text-sm md:text-base hover:bg-green-600 hover:text-white transition shadow-lg">⚽ Spielplan generieren</button>
+                      </div>
                     </div>
                   )}
 
@@ -839,34 +945,44 @@ export default function Admin() {
                                     <div key={groupName}>
                                       <p className="text-[10px] text-gray-400 font-bold uppercase mb-2 ml-2 tracking-wider">Gruppe {groupName}</p>
                                       <div className="flex flex-col gap-2">
-                                        {roundMatches.filter(m => m.group_name === groupName).map(m => (
-                                          <div key={m.id} className="flex items-center justify-between bg-black/40 p-2 md:p-3 rounded-xl border border-white/5">
-                                            <div className="flex-1 text-right truncate pr-2 md:pr-4 font-medium max-w-[40%] text-xs md:text-sm">
-                                              {teams.find(x => x.id === m.team1_id)?.teamname}
+                                        {roundMatches.filter(m => m.group_name === groupName).map(m => {
+                                          const t1Info = teams.find(x => x.id === m.team1_id);
+                                          const t2Info = teams.find(x => x.id === m.team2_id);
+
+                                          return (
+                                            <div key={m.id} className="flex flex-col md:flex-row items-center justify-between bg-black/40 p-2 md:p-3 rounded-xl border border-white/5 gap-2 md:gap-0">
+                                              
+                                              {/* TEAM 1 */}
+                                              <div className="flex-1 w-full md:w-auto">
+                                                <TeamCard team={t1Info?.teams} />
+                                              </div>
+                                              
+                                              {/* ERGEBNIS */}
+                                              <div className="shrink-0 flex items-center justify-center gap-1 md:gap-2 px-2">
+                                                <input
+                                                  type="tel"
+                                                  value={scoreInputs[m.id]?.s1 ?? m.score1 ?? ""}
+                                                  onChange={(e) => handleScoreChange(m.id, "s1", e.target.value)}
+                                                  className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-green-500 focus:bg-white/20 transition text-sm md:text-base font-bold"
+                                                />
+                                                <span className="font-bold text-gray-500">:</span>
+                                                <input
+                                                  type="tel"
+                                                  value={scoreInputs[m.id]?.s2 ?? m.score2 ?? ""}
+                                                  onChange={(e) => handleScoreChange(m.id, "s2", e.target.value)}
+                                                  className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-green-500 focus:bg-white/20 transition text-sm md:text-base font-bold"
+                                                />
+                                                <button onClick={() => saveSingleMatch(m.id)} className="ml-1 md:ml-2 bg-green-600/80 hover:bg-green-500 text-white text-xs px-2.5 py-1.5 md:py-2 rounded-lg transition shadow-sm font-bold">✔</button>
+                                              </div>
+                                              
+                                              {/* TEAM 2 */}
+                                              <div className="flex-1 w-full md:w-auto">
+                                                <TeamCard team={t2Info?.teams} reverseOnMobile />
+                                              </div>
+
                                             </div>
-                                            
-                                            <div className="shrink-0 flex items-center justify-center gap-1 md:gap-2">
-                                              <input
-                                                type="tel"
-                                                value={scoreInputs[m.id]?.s1 ?? m.score1 ?? ""}
-                                                onChange={(e) => handleScoreChange(m.id, "s1", e.target.value)}
-                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-green-500 focus:bg-white/20 transition text-sm md:text-base font-bold"
-                                              />
-                                              <span className="font-bold text-gray-500">:</span>
-                                              <input
-                                                type="tel"
-                                                value={scoreInputs[m.id]?.s2 ?? m.score2 ?? ""}
-                                                onChange={(e) => handleScoreChange(m.id, "s2", e.target.value)}
-                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-white/10 outline-none focus:border-green-500 focus:bg-white/20 transition text-sm md:text-base font-bold"
-                                              />
-                                              <button onClick={() => saveSingleMatch(m.id)} className="ml-1 md:ml-2 bg-green-600/80 hover:bg-green-500 text-white text-xs px-2.5 py-1.5 md:py-2 rounded-lg transition shadow-sm font-bold">✔</button>
-                                            </div>
-                                            
-                                            <div className="flex-1 text-left truncate pl-2 md:pl-4 font-medium max-w-[40%] text-xs md:text-sm">
-                                              {teams.find(x => x.id === m.team2_id)?.teamname}
-                                            </div>
-                                          </div>
-                                        ))}
+                                          );
+                                        })}
                                       </div>
                                     </div>
                                   ))}
@@ -930,34 +1046,44 @@ export default function Admin() {
                                 {isExpanded && (
                                   <div className="p-2 sm:p-4 bg-black/40 border-t border-yellow-500/20">
                                     <div className="flex flex-col gap-2">
-                                      {matchesInRound.map(m => (
-                                        <div key={m.id} className="flex items-center justify-between bg-black/40 p-2 md:p-3 rounded-xl border border-yellow-500/20">
-                                          <div className="flex-1 text-right truncate pr-2 md:pr-4 font-medium max-w-[40%] text-xs md:text-sm text-yellow-400">
-                                            {teams.find(x => x.id === m.team1_id)?.teamname}
+                                      {matchesInRound.map(m => {
+                                        const t1Info = teams.find(x => x.id === m.team1_id);
+                                        const t2Info = teams.find(x => x.id === m.team2_id);
+
+                                        return (
+                                          <div key={m.id} className="flex flex-col md:flex-row items-center justify-between bg-black/40 p-2 md:p-3 rounded-xl border border-yellow-500/20 gap-2 md:gap-0">
+                                            
+                                            {/* TEAM 1 */}
+                                            <div className="flex-1 w-full md:w-auto">
+                                              <TeamCard team={t1Info?.teams} />
+                                            </div>
+                                            
+                                            {/* ERGEBNIS */}
+                                            <div className="shrink-0 flex items-center justify-center gap-1 md:gap-2 px-2">
+                                              <input
+                                                type="tel"
+                                                value={scoreInputs[m.id]?.s1 ?? m.score1 ?? ""}
+                                                onChange={(e) => handleScoreChange(m.id, "s1", e.target.value)}
+                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-sm md:text-base font-bold text-yellow-300"
+                                              />
+                                              <span className="font-bold text-gray-500">:</span>
+                                              <input
+                                                type="tel"
+                                                value={scoreInputs[m.id]?.s2 ?? m.score2 ?? ""}
+                                                onChange={(e) => handleScoreChange(m.id, "s2", e.target.value)}
+                                                className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-sm md:text-base font-bold text-yellow-300"
+                                              />
+                                              <button onClick={() => saveSingleMatch(m.id)} className="ml-1 md:ml-2 bg-yellow-600 hover:bg-yellow-500 text-black text-xs px-2.5 py-1.5 md:py-2 rounded-lg transition shadow-sm font-bold">✔</button>
+                                            </div>
+                                            
+                                            {/* TEAM 2 */}
+                                            <div className="flex-1 w-full md:w-auto">
+                                              <TeamCard team={t2Info?.teams} reverseOnMobile />
+                                            </div>
+
                                           </div>
-                                          
-                                          <div className="shrink-0 flex items-center justify-center gap-1 md:gap-2">
-                                            <input
-                                              type="tel"
-                                              value={scoreInputs[m.id]?.s1 ?? m.score1 ?? ""}
-                                              onChange={(e) => handleScoreChange(m.id, "s1", e.target.value)}
-                                              className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-sm md:text-base font-bold text-yellow-300"
-                                            />
-                                            <span className="font-bold text-gray-500">:</span>
-                                            <input
-                                              type="tel"
-                                              value={scoreInputs[m.id]?.s2 ?? m.score2 ?? ""}
-                                              onChange={(e) => handleScoreChange(m.id, "s2", e.target.value)}
-                                              className="w-10 h-8 md:w-12 md:h-10 bg-white/10 rounded-lg text-center border border-yellow-500/30 outline-none focus:border-yellow-400 focus:bg-white/20 transition text-sm md:text-base font-bold text-yellow-300"
-                                            />
-                                            <button onClick={() => saveSingleMatch(m.id)} className="ml-1 md:ml-2 bg-yellow-600 hover:bg-yellow-500 text-black text-xs px-2.5 py-1.5 md:py-2 rounded-lg transition shadow-sm font-bold">✔</button>
-                                          </div>
-                                          
-                                          <div className="flex-1 text-left truncate pl-2 md:pl-4 font-medium max-w-[40%] text-xs md:text-sm text-yellow-400">
-                                            {teams.find(x => x.id === m.team2_id)?.teamname}
-                                          </div>
-                                        </div>
-                                      ))}
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 )}
@@ -1046,7 +1172,7 @@ export default function Admin() {
 }
 
 // ==========================================
-// AUSGELAGERTE KOMPONENTEN FÜR BESSERE PERFORMANCE
+// AUSGELAGERTE KOMPONENTEN
 // ==========================================
 
 function EditModal({ tournament, onSave, onClose }: any) {

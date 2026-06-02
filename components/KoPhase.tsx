@@ -177,7 +177,7 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     const numS1 = Number(s1);
     const numS2 = Number(s2);
 
-    // 🔥 NEU: Unentschieden in der K.O.-Phase blockieren
+    // Unentschieden in der K.O.-Phase blockieren
     if (numS1 === numS2) {
       alert("Ein Unentschieden ist in der K.O.-Phase nicht möglich! Bitte tragt das finale Ergebnis (inkl. Verlängerung/Elfmeterschießen) ein.");
       return;
@@ -231,25 +231,8 @@ export default function KoPhase({ matches, teams, user, koSize }: KoPhaseProps) 
     const team2Wins = match.score2 > match.score1;
     const winningTeamId = team1Wins ? match.team1_id : team2Wins ? match.team2_id : null;
   
-    // 5. XP vergeben & INS NÄCHSTE MATCH WEITERREICHEN
+    // 5. INS NÄCHSTE MATCH WEITERREICHEN
     if (winningTeamId) {
-      
-      const { data: winnerData } = await supabase
-        .from('teams')
-        .select('active_xp_boosts, bonus_xp')
-        .eq('id', winningTeamId)
-        .single();
-        
-      if (winnerData && winnerData.active_xp_boosts > 0) {
-        const goalsScored = team1Wins ? match.score1 : match.score2;
-        const extraXp = 50 + (goalsScored * 10); 
-  
-        await supabase.from('teams').update({
-          active_xp_boosts: winnerData.active_xp_boosts - 1,
-          bonus_xp: (winnerData.bonus_xp || 0) + extraXp
-        }).eq('id', winningTeamId);
-      }
-  
       // --- DYNAMISCHES WEITERREICHEN ---
       const nextKoRound = match.ko_round / 2;
       
