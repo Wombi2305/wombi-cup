@@ -37,7 +37,6 @@ export default function Anmelden() {
   
   const hasRequiredRole = hasDbRole || hasDiscordRole;
 
-  // 🔥 GEFIXT: Ein einziger, sicherer useEffect für DB und Discord
   useEffect(() => {
     const init = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -45,7 +44,6 @@ export default function Anmelden() {
       setUser(currentUser);
 
       if (currentUser) {
-        // 1. Profil aus der Datenbank laden
         const { data: profile } = await supabase
           .from("profiles")
           .select("role")
@@ -54,7 +52,6 @@ export default function Anmelden() {
           
         if (profile) setUserProfile(profile);
 
-        // 2. Teams aus der Datenbank laden
         const { data: teams } = await supabase
           .from("teams")
           .select("id, teamname, captain, is_active, user_id, level, logo_url, equipped_border, equipped_color, equipped_banner, team_rewards(*)")
@@ -63,11 +60,9 @@ export default function Anmelden() {
         
         if (teams) setOwnedTeams(teams);
 
-        // 3. Discord Check (Direkt über die Supabase Session, OHNE LocalStorage!)
         const discordId = currentUser.user_metadata?.provider_id;
         
         if (discordId) {
-          // Cache-Key an die spezifische ID binden, damit sich Accounts nicht überschneiden
           const cacheKey = `discord_cache_${discordId}`;
           const timeKey = `discord_time_${discordId}`;
           
@@ -94,7 +89,6 @@ export default function Anmelden() {
         }
       }
       
-      // Ladezustände beenden
       setIsCheckingDiscord(false);
       setDbCheckDone(true);
     };
@@ -102,7 +96,6 @@ export default function Anmelden() {
     init();
   }, []);
 
-  // Standardwerte setzen
   useEffect(() => {
     if (tournaments.length === 0 || !dbCheckDone || isCheckingDiscord) return;
 
@@ -272,7 +265,6 @@ export default function Anmelden() {
               
               const myRegistrations = registrations.filter((r: any) => r.teams?.user_id === user?.id);
               const registeredTeamIds = myRegistrations.map((r: any) => r.team_id);
-              
               const availableTeams = ownedTeams.filter(ot => !registeredTeamIds.includes(ot.id));
 
               return (
@@ -280,14 +272,29 @@ export default function Anmelden() {
                   key={t.id} 
                   className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] p-6 shadow-2xl flex flex-col gap-4 transition-all duration-300 hover:-translate-y-2 hover:bg-white/10 hover:border-white/20 hover:shadow-[0_15px_40px_rgba(0,0,0,0.6)] h-fit overflow-visible"
                 >
-                  <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                  <div className={`absolute top-0 left-0 w-full h-32 bg-gradient-to-b to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none ${
+                    t.cup_type === 'night_cup' ? 'from-indigo-500/15' : 
+                    t.cup_type === 'cup_21er' ? 'from-orange-500/15' : // 🔥 Geändert zu orange
+                    'from-yellow-500/15'
+                  }`} />
 
                   <div className="flex justify-between items-start gap-4 relative z-10">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] uppercase font-black tracking-widest text-yellow-500/80 mb-1">
-                        {t.cup_type === 'night_cup' ? '🌙 Night Cup' : t.cup_type === 'cup_21er' ? '🔥 21er Cup' : '🏆 T-Cup'}
-                      </span>
-                      <h3 className="text-xl md:text-2xl font-black text-white drop-shadow-md leading-tight">
+                    <div className="flex flex-col items-start gap-2">
+                      {t.cup_type === 'night_cup' ? (
+                        <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-[10px] uppercase font-black tracking-widest shadow-[0_0_10px_rgba(99,102,241,0.1)]">
+                          🌙 Night Cup
+                        </span>
+                      ) : t.cup_type === 'cup_21er' ? (
+                        <span className="px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-[10px] uppercase font-black tracking-widest shadow-[0_0_10px_rgba(249,115,22,0.1)]">
+                          🔥 21er Cup
+                        </span> // 🔥 Geändert zu orange
+                      ) : (
+                        <span className="px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 text-[10px] uppercase font-black tracking-widest shadow-[0_0_10px_rgba(234,179,8,0.1)]">
+                          🏆 T-Cup
+                        </span>
+                      )}
+
+                      <h3 className="text-xl md:text-2xl font-black text-white drop-shadow-md leading-tight mt-1">
                         {t.name}
                       </h3>
                     </div>
@@ -313,17 +320,20 @@ export default function Anmelden() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-2 text-sm text-gray-300 font-medium relative z-10">
-                    <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="flex flex-col gap-4 text-sm text-gray-300 font-medium relative z-10 mt-1 mb-1">
+                    
+                    <div className="flex items-center gap-2.5 bg-black/40 border border-white/10 w-fit px-4 py-2.5 rounded-xl shadow-inner">
+                      <svg className={`w-5 h-5 ${t.cup_type === 'night_cup' ? 'text-indigo-400' : t.cup_type === 'cup_21er' ? 'text-orange-400' : 'text-yellow-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span>{t.start_time ? new Date(t.start_time).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : "Kein Datum"}</span>
+                      </svg> {/* 🔥 Geändert zu orange */}
+                      <span className="text-white font-bold tracking-wide">
+                        {t.start_time ? new Date(t.start_time).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) + " Uhr" : "TBA"}
+                      </span>
                     </div>
                     
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                         <span className="text-white font-bold">{approvedCount} <span className="text-gray-400 font-normal">/ {t.max_teams || "∞"} Teams</span></span>
@@ -340,7 +350,15 @@ export default function Anmelden() {
                   <div className="relative z-10 mt-1">
                     <div className="w-full h-2.5 bg-black/50 rounded-full overflow-hidden border border-white/5">
                       <div 
-                        className={`h-full rounded-full transition-all duration-700 ease-out relative ${isFull ? "bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]" : "bg-gradient-to-r from-yellow-600 to-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.5)]"}`} 
+                        className={`h-full rounded-full transition-all duration-700 ease-out relative ${
+                          isFull 
+                            ? "bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)]" 
+                            : t.cup_type === 'night_cup'
+                              ? "bg-gradient-to-r from-indigo-600 to-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+                              : t.cup_type === 'cup_21er'
+                                ? "bg-gradient-to-r from-orange-600 to-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.5)]" // 🔥 Geändert zu orange
+                                : "bg-gradient-to-r from-yellow-600 to-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.5)]"
+                        }`} 
                         style={{ width: `${percent}%` }} 
                       >
                         <div className="absolute top-0 right-0 bottom-0 w-10 bg-gradient-to-r from-transparent to-white/30 rounded-full"></div>
