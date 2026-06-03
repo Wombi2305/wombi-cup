@@ -2,7 +2,21 @@
 import { useEffect, useState, useMemo, useRef, Fragment } from "react";
 import { supabase } from "@/lib/supabase";
 import Image from "next/image"; 
-import TeamCard from "@/components/TeamCard"; // 🔥 Globale TeamCard importiert
+import TeamCard from "@/components/TeamCard"; 
+
+// 🔥 ECHTER TURNIERBAUM-ALGORITHMUS (Sorgt dafür, dass Seed 1 & 2 erst im Finale spielen)
+const getBracketSeeding = (size: number) => {
+  let rounds = [1, 2];
+  for (let r = 2; r < size; r *= 2) {
+    let nextRounds = [];
+    for (let i = 0; i < rounds.length; i++) {
+      nextRounds.push(rounds[i]);
+      nextRounds.push(r * 2 + 1 - rounds[i]);
+    }
+    rounds = nextRounds;
+  }
+  return rounds;
+};
 
 export default function Admin() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -33,7 +47,7 @@ export default function Admin() {
   const [koSizes, setKoSizes] = useState<{[key: number]: number}>({});
   const [isGeneratingKo, setIsGeneratingKo] = useState(false);
 
-  // 🔥 NEU: Speichert pro Turnier, ob Hin- und Rückspiel gewünscht ist
+  // Speichert pro Turnier, ob Hin- und Rückspiel gewünscht ist
   const [doubleRoundRobin, setDoubleRoundRobin] = useState<{[key: number]: boolean}>({});
 
   // State für die Admin-Benachrichtigungen (Toasts)
@@ -130,7 +144,6 @@ export default function Admin() {
   };
 
   const fetchGroups = async () => {
-    // 🔥 GEFIXT: teams(*) lädt nun alle Custom-Rewards mit herunter (für die globale TeamCard)
     const { data: regs } = await supabase
       .from("tournament_registrations")
       .select("*, teams(*, team_rewards(*, custom_rewards(*)))") 
@@ -145,7 +158,7 @@ export default function Admin() {
           tournament_id: r.tournament_id,
           status: r.status,
           teamname: r.teams?.teamname,
-          teams: r.teams // 🔥 Ganzes Team-Objekt für die TeamCard weiterreichen
+          teams: r.teams 
       }));
       setTeams(mappedTeams);
     }
@@ -158,7 +171,6 @@ export default function Admin() {
         
         const reg = regs.find((r: any) => r.team_id === row.team_id && r.status === "approved");
         if (reg && reg.teams) {
-          // 🔥 Auch hier das komplette Team weiterreichen
           grouped[row.tournament_id][row.group_name].push({ id: row.team_id, teamname: reg.teams.teamname, fullTeam: reg.teams });
         }
       });
@@ -421,7 +433,7 @@ export default function Admin() {
     Object.entries(tGroups).forEach(([groupName, groupTeams]: any) => {
       const table: any = {};
       groupTeams.forEach((team: any) => {
-        table[team.id] = { ...team, sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0 };
+        table[team.id] = { ...team, sp: 0, g: 0, u: 0, v: 0, tore: 0, gegentore: 0, pkt: 0, group_name: groupName };
       });
 
       tMatches.forEach(m => {
@@ -550,34 +562,84 @@ export default function Admin() {
         }
 
         dummies.forEach(dummy => {
-            qualifiedTeams.push({ id: dummy.id, teamname: "--- FREILOS ---" });
+            qualifiedTeams.push({ id: dummy.id, teamname: "--- FREILOS ---", group_name: "NONE" });
         });
       }
 
-      const roundsMap: any = {};
+      // 🔥 NEU: SPLIT IN POT 1 (SEEDS) UND POT 2 (UNSEEDED / ZUGELOST)
+      const halfSize = size / 2;
+      let pot1 = qualifiedTeams.slice(0, halfSize);
+      let pot2 = qualifiedTeams.slice(halfSize, size);
 
-      roundsMap[size] = [];
-      for (let i = 0; i < size / 2; i++) {
-          const homeTeam = qualifiedTeams[i];
-          const awayTeam = qualifiedTeams[size - 1 - i];
+      // Pot 2 mischen (Zulosung)
+      let shuffledPot2 = [...pot2].sort(() => Math.random() - 0.5);
 
-          const isHomeFreilos = homeTeam?.teamname === "--- FREILOS ---";
-          const isAwayFreilos = awayTeam?.teamname === "--- FREILOS ---";
-
-          roundsMap[size].push({
-              tournament_id: tournamentId,
-              team1_id: homeTeam?.id || null,
-              team2_id: awayTeam?.id || null,
-              match_type: "ko",
-              ko_round: size,
-              status: (isHomeFreilos || isAwayFreilos) ? "confirmed" : "pending",
-              score1: isHomeFreilos ? 0 : (isAwayFreilos ? 1 : null),
-              score2: isHomeFreilos ? 1 : (isAwayFreilos ? 0 : null),
-              reported_by: null, confirmed_by: null,
-              _winnerObj: isHomeFreilos ? awayTeam : (isAwayFreilos ? homeTeam : null)
-          });
+      let matchups = [];
+      for (let i = 0; i < halfSize; i++) {
+        matchups.push({
+          seed: pot1[i],
+          unseeded: shuffledPot2[i],
+        });
       }
 
+      // 🔥 KONFLIKT-LÖSER (Gleiche Gruppe in Runde 1 verhindern)
+      for (let i = 0; i < matchups.length; i++) {
+        let m = matchups[i];
+        let t1Grp = m.seed?.group_name;
+        let t2Grp = m.unseeded?.group_name;
+
+        // Wenn beide aus derselben Gruppe kommen und KEIN Freilos sind
+        if (t1Grp && t2Grp && t1Grp === t2Grp && t1Grp !== "NONE") {
+          // Finde ein anderes Match zum Tauschen
+          for (let j = 0; j < matchups.length; j++) {
+            if (i === j) continue;
+            let otherM = matchups[j];
+            let ot1Grp = otherM.seed?.group_name;
+            let ot2Grp = otherM.unseeded?.group_name;
+
+            // Prüfe ob der Tausch neue Konflikte auslösen würde
+            if (t1Grp !== ot2Grp && ot1Grp !== t2Grp) {
+              // Tausche die Auswärtsteams (unseeded)
+              let temp = m.unseeded;
+              m.unseeded = otherM.unseeded;
+              otherM.unseeded = temp;
+              break; 
+            }
+          }
+        }
+      }
+
+      // 🔥 ECHTER TURNIERBAUM (Seeds 1 & 2 erst im Finale)
+      const seeding = getBracketSeeding(halfSize);
+      const roundsMap: any = {};
+      roundsMap[size] = [];
+
+      // Trage die sortierten (und gefixten) Matchups in die DB-Liste ein
+      for (let i = 0; i < halfSize; i++) {
+        const matchupIndex = seeding[i] - 1; // 1-basiert zu 0-basiert
+        const m = matchups[matchupIndex];
+
+        const homeTeam = m.seed;
+        const awayTeam = m.unseeded;
+
+        const isHomeFreilos = homeTeam?.teamname === "--- FREILOS ---";
+        const isAwayFreilos = awayTeam?.teamname === "--- FREILOS ---";
+
+        roundsMap[size].push({
+            tournament_id: tournamentId,
+            team1_id: homeTeam?.id || null,
+            team2_id: awayTeam?.id || null,
+            match_type: "ko",
+            ko_round: size,
+            status: (isHomeFreilos || isAwayFreilos) ? "confirmed" : "pending",
+            score1: isHomeFreilos ? 0 : (isAwayFreilos ? 1 : null),
+            score2: isHomeFreilos ? 1 : (isAwayFreilos ? 0 : null),
+            reported_by: null, confirmed_by: null,
+            _winnerObj: isHomeFreilos ? awayTeam : (isAwayFreilos ? homeTeam : null)
+        });
+      }
+
+      // Baue die weiteren Runden auf (Achtelfinale, Viertelfinale etc.)
       let currentRoundSize = size / 2;
       while (currentRoundSize >= 2) {
           roundsMap[currentRoundSize] = [];
@@ -698,7 +760,7 @@ export default function Admin() {
       bottom_places: 1,
       started: false,
       draw_finished: false,
-      season: 0 // 🔥 NEU: Default auf Season 0
+      season: 0
     }]);
 
     if (error) return alert(`Fehler: ${error.message}`);
@@ -819,8 +881,35 @@ export default function Admin() {
               {/* --- HEADER --- */}
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4 border-b border-white/5 pb-4 xl:border-none xl:pb-0">
                 <div className="w-full xl:w-auto">
+                  
+                  {/* 🔥 CUP BADGE */}
+                  {t.cup_type === 'night_cup' ? (
+                    <span className="px-2 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-[10px] uppercase font-black tracking-widest shadow-[0_0_10px_rgba(99,102,241,0.1)] mb-2 inline-block">
+                      🌙 Night Cup
+                    </span>
+                  ) : t.cup_type === 'cup_21er' ? (
+                    <span className="px-2 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-[10px] uppercase font-black tracking-widest shadow-[0_0_10px_rgba(249,115,22,0.1)] mb-2 inline-block">
+                      🔥 21er Cup
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 text-[10px] uppercase font-black tracking-widest shadow-[0_0_10px_rgba(234,179,8,0.1)] mb-2 inline-block">
+                      🏆 T-Cup
+                    </span>
+                  )}
+
                   <h3 className="text-xl md:text-2xl font-bold break-words">{t.name}</h3>
-                  <div className="flex flex-wrap gap-2 mt-3">
+
+                  {/* 🔥 DATUM BADGE */}
+                  <div className="flex items-center gap-2 bg-black/40 border border-white/10 w-fit px-3 py-1.5 rounded-lg shadow-inner mt-2">
+                    <svg className={`w-4 h-4 ${t.cup_type === 'night_cup' ? 'text-indigo-400' : t.cup_type === 'cup_21er' ? 'text-orange-400' : 'text-yellow-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span className="text-white/90 font-bold text-xs tracking-wide">
+                      {t.start_time ? new Date(t.start_time).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) + " Uhr" : "TBA"}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mt-4">
                     <button onClick={() => setEditingId(t.id)} className="text-[10px] md:text-xs px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 uppercase font-bold hover:bg-blue-500/20 transition">✏️ Edit</button>
                     
                     {isFullAdmin && (
@@ -907,7 +996,6 @@ export default function Admin() {
                         ))}
                       </div>
                       
-                      {/* 🔥 NEU: Schalter für Hin- und Rückspiel */}
                       <div className="flex flex-col gap-2 mt-4">
                         <label className="flex items-center justify-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white transition bg-black/20 py-3 rounded-xl border border-white/5">
                           <input 
